@@ -35,7 +35,7 @@ internal sealed class SafetyGate
         if (s.OnlyInCombat && !snapshot.InCombat)
             return Block("not in combat", out reason);
         if (s.OnlyMeleeJobs && !GameStateReader.IsMeleeJob(snapshot.JobId))
-            return Block("not a melee job", out reason);
+            return Block($"not a melee job (job {snapshot.JobId})", out reason);
         if (s.RequiredDependencies.HasFlag(RequiredDependencies.RequireVnavmesh) && !vnavmesh.IsReady())
             return Block("vnavmesh unavailable or navmesh not ready", out reason);
         if (s.RequiredDependencies.HasFlag(RequiredDependencies.RequireBossModSafety) && !bossMod.TryGetRecommendedPositional(out _))

@@ -13,7 +13,7 @@ internal sealed class GameStateReader
 
     private static readonly HashSet<uint> MeleeJobs = new()
     {
-        2, 4, 20, 22, 29, 30, 34, 39,
+        2, 4, 20, 22, 29, 30, 34, 39, 41,
     };
 
     public GameStateReader(PluginServices services) => this.services = services;
