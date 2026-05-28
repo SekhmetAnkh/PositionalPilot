@@ -40,6 +40,7 @@ internal sealed class MovementController
 
     public void Update()
     {
+        RefreshDependencyStatus();
         LastSnapshot = game.Read();
 
         if (State == MovementState.EmergencyStopped)
@@ -154,6 +155,13 @@ internal sealed class MovementController
         State = MovementState.EmergencyStopped;
         BlockReason = "emergency stopped";
         config.Save();
+    }
+
+    public void RefreshDependencyStatus()
+    {
+        bossMod.RefreshAvailability();
+        vnavmesh.RefreshAvailability();
+        rotationSolver.RefreshAvailability();
     }
 
     public void ClearEmergencyStop()

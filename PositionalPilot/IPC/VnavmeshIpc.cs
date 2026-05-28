@@ -23,6 +23,13 @@ internal sealed class VnavmeshIpc : IpcAdapterBase
         navReady = pi.GetIpcSubscriber<bool>("vnavmesh.Nav.IsReady");
     }
 
+    public override void RefreshAvailability() =>
+        SetAvailability(
+            "vnavmesh IPC providers not found",
+            () => navReady.HasFunction,
+            () => moveCloseTo.HasFunction || moveTo.HasFunction,
+            () => stop.HasAction);
+
     public bool IsReady() => TryCall(nameof(IsReady), () => navReady.InvokeFunc(), out var ready) && ready;
 
     public bool IsNavigating() => TryCall(nameof(IsNavigating), () => isRunning.InvokeFunc(), out var running) && running;

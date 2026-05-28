@@ -16,6 +16,23 @@ internal abstract class IpcAdapterBase
     public bool Available { get; protected set; }
     public string? LastError { get; protected set; }
 
+    public abstract void RefreshAvailability();
+
+    protected void SetAvailability(string okMessage, params Func<bool>[] checks)
+    {
+        try
+        {
+            Available = checks.All(check => check());
+            LastError = Available ? null : okMessage;
+        }
+        catch (Exception ex)
+        {
+            Available = false;
+            LastError = $"availability check failed: {ex.Message}";
+            Logger.Warning($"{GetType().Name}:availability", LastError);
+        }
+    }
+
     protected bool TryCall(string name, Action action)
     {
         try

@@ -18,6 +18,11 @@ internal sealed class RotationSolverIpc : IpcAdapterBase
         triggerSpecialDuration = pi.GetIpcSubscriber<byte, float, object>("RotationSolverReborn.TriggerSpecialStateWithDuration");
     }
 
+    public override void RefreshAvailability() =>
+        SetAvailability(
+            "RotationSolverReborn coordination IPC providers not found",
+            () => triggerSpecial.HasAction || triggerSpecialDuration.HasAction);
+
     public void TriggerSpecialState(byte special) =>
         TryCall(nameof(TriggerSpecialState), () => triggerSpecial.InvokeAction(special));
 

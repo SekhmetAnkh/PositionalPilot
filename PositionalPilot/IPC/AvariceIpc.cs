@@ -12,6 +12,9 @@ internal sealed class AvariceIpc : IpcAdapterBase
         cardinalDirection = services.PluginInterface.GetIpcSubscriber<IntPtr, int>("Avarice.CardinalDirection");
     }
 
+    public override void RefreshAvailability() =>
+        SetAvailability("Avarice CardinalDirection IPC provider not found", () => cardinalDirection.HasFunction);
+
     public bool TryGetCardinalDirection(IntPtr gameObjectAddress, out int direction) =>
         TryCall(nameof(TryGetCardinalDirection), () => cardinalDirection.InvokeFunc(gameObjectAddress), out direction);
 }

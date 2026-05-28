@@ -38,6 +38,13 @@ internal sealed class BossModIpc : IpcAdapterBase
         playerSpeed = pi.GetIpcSubscriber<float>("BossMod.AI.PlayerSpeed");
     }
 
+    public override void RefreshAvailability() =>
+        SetAvailability(
+            "BossModReborn IPC providers not found",
+            () => recommended.HasFunction,
+            () => isPositionSafe.HasFunction,
+            () => isDashSafe.HasFunction);
+
     public bool TryGetRecommendedPositional(out PositionalRequirement positional)
     {
         if (TryCall(nameof(TryGetRecommendedPositional), () => recommended.InvokeFunc(), out var raw))

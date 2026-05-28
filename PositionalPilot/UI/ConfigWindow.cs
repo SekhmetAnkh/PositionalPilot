@@ -99,6 +99,11 @@ internal sealed class ConfigWindow
 
     private void DrawDependencies()
     {
+        bossMod.RefreshAvailability();
+        rotationSolver.RefreshAvailability();
+        vnavmesh.RefreshAvailability();
+        avarice.RefreshAvailability();
+
         ImGui.TextUnformatted("Dependencies");
         DrawDependency("BossModReborn", bossMod.Available, bossMod.LastError);
         DrawDependency("RotationSolverReborn", rotationSolver.Available, rotationSolver.LastError);

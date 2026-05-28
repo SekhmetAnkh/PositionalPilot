@@ -123,6 +123,11 @@ public sealed class Plugin : IDalamudPlugin
 
     private void PrintStatus()
     {
+        bossMod.RefreshAvailability();
+        rotationSolver.RefreshAvailability();
+        vnavmesh.RefreshAvailability();
+        avarice.RefreshAvailability();
+
         var snap = movement.LastSnapshot;
         services.Chat.Print($"PositionalPilot: enabled={config.Settings.Enabled}, mode={config.Settings.MovementMode}, state={movement.State}");
         services.Chat.Print($"Deps: BossMod={bossMod.Available} ({bossMod.LastError ?? "ok"}), RSR={rotationSolver.Available} ({rotationSolver.LastError ?? "ok"}), vnavmesh={vnavmesh.Available} ({vnavmesh.LastError ?? "ok"}), Avarice={avarice.Available} ({avarice.LastError ?? "optional"})");
