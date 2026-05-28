@@ -20,6 +20,7 @@ internal sealed class MovementController
     private ulong lastTargetId;
     private Candidate? currentCandidate;
     private Task<bool>? pendingMoveTask;
+    private string candidateFailureReason = string.Empty;
 
     public MovementController(Configuration config, GameStateReader game, BossModIpc bossMod, VnavmeshIpc vnavmesh, RotationSolverIpc rotationSolver, ThrottledLogger logger)
     {
@@ -53,8 +54,13 @@ internal sealed class MovementController
 
             if (pendingMoveTask.IsFaulted || pendingMoveTask.IsCanceled || !pendingMoveTask.Result)
             {
+                var detail = pendingMoveTask.IsFaulted
+                    ? pendingMoveTask.Exception?.GetBaseException().Message ?? "task faulted"
+                    : pendingMoveTask.IsCanceled
+                        ? "task canceled"
+                        : "no vnavmesh path to selected candidate";
                 pendingMoveTask = null;
-                Stop("vnavmesh path request failed");
+                Stop($"vnavmesh path request failed: {detail}");
                 EnterCooldown();
                 return;
             }
@@ -114,7 +120,7 @@ internal sealed class MovementController
         var selected = EvaluateCandidate(LastSnapshot, positional);
         if (selected == null)
         {
-            BlockReason = "no safe candidate";
+            BlockReason = string.IsNullOrWhiteSpace(candidateFailureReason) ? "no safe candidate" : candidateFailureReason;
             State = MovementState.Blocked;
             return;
         }
@@ -133,9 +139,10 @@ internal sealed class MovementController
             return;
         }
 
-        if (!vnavmesh.TryPathfindAndMoveCloseTo(selected.Position, config.Settings.StopWithinYalms, out pendingMoveTask))
+        var navTolerance = GetVnavmeshTolerance();
+        if (!vnavmesh.TryPathfindAndMoveCloseTo(selected.Position, navTolerance, out pendingMoveTask))
         {
-            Stop("vnavmesh path request failed");
+            Stop($"vnavmesh path request failed: {vnavmesh.LastError ?? "IPC call failed"}");
             EnterCooldown();
             return;
         }
@@ -180,16 +187,42 @@ internal sealed class MovementController
 
     private Candidate? EvaluateCandidate(GameSnapshot snapshot, PositionalRequirement positional)
     {
+        candidateFailureReason = string.Empty;
         var target = new TargetSnapshot(snapshot.TargetPosition, snapshot.TargetRotation, snapshot.TargetHitboxRadius);
         var candidates = PositionalGeometry.GenerateCandidates(snapshot.PlayerPosition, target, positional, config.Settings)
             .Where(c => bossMod.IsPositionSafe(c.Position) && bossMod.IsDashSafe(snapshot.PlayerPosition, c.Position))
             .OrderBy(c => c.Score)
             .ToArray();
 
-        currentCandidate = PositionalGeometry.ApplyHysteresis(currentCandidate, candidates, config.Settings, c => bossMod.IsPositionSafe(c.Position));
-        logger.Debug(config, "candidate-count", $"Candidates after safety filter: {candidates.Length}; selected: {currentCandidate?.Position.ToString() ?? "none"}");
+        if (candidates.Length == 0)
+        {
+            candidateFailureReason = "no BossMod-safe positional candidates";
+            currentCandidate = null;
+            logger.Debug(config, "candidate-count", "Candidates after BossMod safety filter: 0");
+            return null;
+        }
+
+        var navTolerance = GetVnavmeshTolerance();
+        var pathable = candidates
+            .Where(c => vnavmesh.CanPathfind(snapshot.PlayerPosition, c.Position, navTolerance, out _))
+            .ToArray();
+
+        if (pathable.Length == 0)
+        {
+            candidateFailureReason = $"no vnavmesh path to {candidates.Length} safe candidate(s)";
+            currentCandidate = null;
+            logger.Debug(config, "candidate-count", $"BossMod-safe candidates: {candidates.Length}; vnavmesh-pathable: 0; tolerance={navTolerance:F2}");
+            return null;
+        }
+
+        currentCandidate = PositionalGeometry.ApplyHysteresis(currentCandidate, pathable, config.Settings, c =>
+            bossMod.IsPositionSafe(c.Position) &&
+            vnavmesh.CanPathfind(snapshot.PlayerPosition, c.Position, navTolerance, out _));
+        logger.Debug(config, "candidate-count", $"BossMod-safe candidates: {candidates.Length}; vnavmesh-pathable: {pathable.Length}; selected: {currentCandidate?.Position.ToString() ?? "none"}");
         return currentCandidate;
     }
+
+    private float GetVnavmeshTolerance() => MathF.Max(config.Settings.StopWithinYalms, 1.0f);
 
     private void EnterCooldown()
     {

@@ -8,6 +8,7 @@ internal sealed class VnavmeshIpc : IpcAdapterBase
 {
     private readonly ICallGateSubscriber<Vector3, bool, Task<bool>> moveTo;
     private readonly ICallGateSubscriber<Vector3, bool, float, Task<bool>> moveCloseTo;
+    private readonly ICallGateSubscriber<Vector3, Vector3, bool, float, List<Vector3>> pathfindWithTolerance;
     private readonly ICallGateSubscriber<object> stop;
     private readonly ICallGateSubscriber<bool> isRunning;
     private readonly ICallGateSubscriber<bool> navReady;
@@ -18,6 +19,7 @@ internal sealed class VnavmeshIpc : IpcAdapterBase
         var pi = services.PluginInterface;
         moveTo = pi.GetIpcSubscriber<Vector3, bool, Task<bool>>("vnavmesh.SimpleMove.PathfindAndMoveTo");
         moveCloseTo = pi.GetIpcSubscriber<Vector3, bool, float, Task<bool>>("vnavmesh.SimpleMove.PathfindAndMoveCloseTo");
+        pathfindWithTolerance = pi.GetIpcSubscriber<Vector3, Vector3, bool, float, List<Vector3>>("vnavmesh.Nav.PathfindWithTolerance");
         stop = pi.GetIpcSubscriber<object>("vnavmesh.Path.Stop");
         isRunning = pi.GetIpcSubscriber<bool>("vnavmesh.Path.IsRunning");
         navReady = pi.GetIpcSubscriber<bool>("vnavmesh.Nav.IsReady");
@@ -28,6 +30,7 @@ internal sealed class VnavmeshIpc : IpcAdapterBase
             "vnavmesh IPC providers not found",
             () => navReady.HasFunction,
             () => moveCloseTo.HasFunction || moveTo.HasFunction,
+            () => pathfindWithTolerance.HasFunction,
             () => stop.HasAction);
 
     public bool IsReady() => TryCall(nameof(IsReady), () => navReady.InvokeFunc(), out var ready) && ready;
@@ -54,6 +57,16 @@ internal sealed class VnavmeshIpc : IpcAdapterBase
         }
 
         return true;
+    }
+
+    public bool CanPathfind(Vector3 from, Vector3 destination, float tolerance, out int waypointCount)
+    {
+        waypointCount = 0;
+        if (!TryCall(nameof(CanPathfind), () => pathfindWithTolerance.InvokeFunc(from, destination, false, tolerance), out var path))
+            return false;
+
+        waypointCount = path.Count;
+        return path.Count > 0;
     }
 
     public void Stop() => TryCall(nameof(Stop), () => stop.InvokeAction());
