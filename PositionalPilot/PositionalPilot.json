@@ -4,7 +4,7 @@
   "Punchline": "Assistive, safety-gated melee positional movement.",
   "Description": "Suggests or safely moves toward BossMod-recommended rear/flank positions using vnavmesh when explicitly enabled.",
   "InternalName": "PositionalPilot",
-  "AssemblyVersion": "0.1.2.0",
+  "AssemblyVersion": "0.1.3.0",
   "RepoUrl": "https://github.com/SekhmetAnkh/PositionalPilot",
   "ApplicableVersion": "any",
   "DalamudApiLevel": 15,
