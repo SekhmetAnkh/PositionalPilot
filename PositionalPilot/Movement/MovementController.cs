@@ -21,6 +21,8 @@ internal sealed class MovementController
     private Candidate? currentCandidate;
     private Task<bool>? pendingMoveTask;
     private string candidateFailureReason = string.Empty;
+    private Vector3? lastFailedPathDestination;
+    private DateTime lastFailedPathTime = DateTime.MinValue;
 
     public MovementController(Configuration config, GameStateReader game, BossModIpc bossMod, VnavmeshIpc vnavmesh, RotationSolverIpc rotationSolver, ThrottledLogger logger)
     {
@@ -60,8 +62,14 @@ internal sealed class MovementController
                         ? "task canceled"
                         : "no vnavmesh path to selected candidate";
                 pendingMoveTask = null;
+                if (currentCandidate != null)
+                {
+                    lastFailedPathDestination = currentCandidate.Position;
+                    lastFailedPathTime = DateTime.UtcNow;
+                    currentCandidate = null;
+                }
                 Stop($"vnavmesh path request failed: {detail}");
-                EnterCooldown();
+                EnterCooldown(2000);
                 return;
             }
 
@@ -143,7 +151,14 @@ internal sealed class MovementController
         if (!vnavmesh.TryPathfindAndMoveCloseTo(selected.Position, navTolerance, out pendingMoveTask))
         {
             Stop($"vnavmesh path request failed: {vnavmesh.LastError ?? "IPC call failed"}");
-            EnterCooldown();
+            if (selected != null)
+            {
+                lastFailedPathDestination = selected.Position;
+                lastFailedPathTime = DateTime.UtcNow;
+                currentCandidate = null;
+            }
+
+            EnterCooldown(2000);
             return;
         }
 
@@ -205,22 +220,22 @@ internal sealed class MovementController
         var navTolerance = GetVnavmeshTolerance();
         var pathable = candidates
             .Where(c => HasPositionalToleranceBuffer(target, c, navTolerance))
-            .Where(c => vnavmesh.CanPathfind(snapshot.PlayerPosition, c.Position, navTolerance, out _))
+            .Where(c => !RecentlyFailedPath(c.Position))
             .ToArray();
 
         if (pathable.Length == 0)
         {
-            candidateFailureReason = $"no vnavmesh-pathable candidate with positional buffer from {candidates.Length} safe candidate(s)";
+            candidateFailureReason = $"no buffered candidate available from {candidates.Length} safe candidate(s)";
             currentCandidate = null;
-            logger.Debug(config, "candidate-count", $"BossMod-safe candidates: {candidates.Length}; buffered vnavmesh-pathable: 0; tolerance={navTolerance:F2}");
+            logger.Debug(config, "candidate-count", $"BossMod-safe candidates: {candidates.Length}; buffered candidates: 0; tolerance={navTolerance:F2}");
             return null;
         }
 
         currentCandidate = PositionalGeometry.ApplyHysteresis(currentCandidate, pathable, config.Settings, c =>
             bossMod.IsPositionSafe(c.Position) &&
             HasPositionalToleranceBuffer(target, c, navTolerance) &&
-            vnavmesh.CanPathfind(snapshot.PlayerPosition, c.Position, navTolerance, out _));
-        logger.Debug(config, "candidate-count", $"BossMod-safe candidates: {candidates.Length}; buffered vnavmesh-pathable: {pathable.Length}; selected: {currentCandidate?.Position.ToString() ?? "none"}");
+            !RecentlyFailedPath(c.Position));
+        logger.Debug(config, "candidate-count", $"BossMod-safe candidates: {candidates.Length}; buffered candidates: {pathable.Length}; selected: {currentCandidate?.Position.ToString() ?? "none"}");
         return currentCandidate;
     }
 
@@ -237,9 +252,14 @@ internal sealed class MovementController
         return candidate.AngularDeviationRadians + toleranceAngle + guardAngle <= MathF.PI / 4f;
     }
 
-    private void EnterCooldown()
+    private bool RecentlyFailedPath(Vector3 destination) =>
+        lastFailedPathDestination.HasValue &&
+        DateTime.UtcNow - lastFailedPathTime < TimeSpan.FromSeconds(5) &&
+        PositionalGeometry.DistanceXZ(lastFailedPathDestination.Value, destination) < 0.75f;
+
+    private void EnterCooldown(int? overrideMs = null)
     {
         State = MovementState.Cooldown;
-        nextRepath = DateTime.UtcNow.AddMilliseconds(config.Settings.RepathCooldownMs);
+        nextRepath = DateTime.UtcNow.AddMilliseconds(overrideMs ?? config.Settings.RepathCooldownMs);
     }
 }
