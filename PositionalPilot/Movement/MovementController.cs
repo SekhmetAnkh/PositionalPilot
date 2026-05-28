@@ -19,7 +19,6 @@ internal sealed class MovementController
     private DateTime nextRepath = DateTime.MinValue;
     private ulong lastTargetId;
     private Candidate? currentCandidate;
-    private Task<bool>? pendingMoveTask;
     private string candidateFailureReason = string.Empty;
     private Vector3? lastFailedPathDestination;
     private DateTime lastFailedPathTime = DateTime.MinValue;
@@ -48,33 +47,6 @@ internal sealed class MovementController
 
         if (State == MovementState.EmergencyStopped)
             return;
-
-        if (pendingMoveTask != null)
-        {
-            if (!pendingMoveTask.IsCompleted)
-                return;
-
-            if (pendingMoveTask.IsFaulted || pendingMoveTask.IsCanceled || !pendingMoveTask.Result)
-            {
-                var detail = pendingMoveTask.IsFaulted
-                    ? pendingMoveTask.Exception?.GetBaseException().Message ?? "task faulted"
-                    : pendingMoveTask.IsCanceled
-                        ? "task canceled"
-                        : "no vnavmesh path to selected candidate";
-                pendingMoveTask = null;
-                if (currentCandidate != null)
-                {
-                    lastFailedPathDestination = currentCandidate.Position;
-                    lastFailedPathTime = DateTime.UtcNow;
-                    currentCandidate = null;
-                }
-                Stop($"vnavmesh path request failed: {detail}");
-                EnterCooldown(2000);
-                return;
-            }
-
-            pendingMoveTask = null;
-        }
 
         if (LastSnapshot.HasTarget && lastTargetId != 0 && LastSnapshot.TargetId != lastTargetId)
         {
@@ -148,15 +120,12 @@ internal sealed class MovementController
         }
 
         var navTolerance = GetVnavmeshTolerance();
-        if (!vnavmesh.TryPathfindAndMoveCloseTo(selected.Position, navTolerance, out pendingMoveTask))
+        if (!vnavmesh.PathfindAndMoveCloseTo(selected.Position, navTolerance))
         {
             Stop($"vnavmesh path request failed: {vnavmesh.LastError ?? "IPC call failed"}");
-            if (selected != null)
-            {
-                lastFailedPathDestination = selected.Position;
-                lastFailedPathTime = DateTime.UtcNow;
-                currentCandidate = null;
-            }
+            lastFailedPathDestination = selected.Position;
+            lastFailedPathTime = DateTime.UtcNow;
+            currentCandidate = null;
 
             EnterCooldown(2000);
             return;
