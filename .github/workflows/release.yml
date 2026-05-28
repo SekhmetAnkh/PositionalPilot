@@ -27,6 +27,14 @@ jobs:
       - name: Restore
         run: dotnet restore PositionalPilot.sln
 
+      - name: Install Dalamud dev files
+        shell: pwsh
+        run: |
+          $hooks = Join-Path $env:APPDATA "XIVLauncher/addon/Hooks/dev"
+          New-Item -ItemType Directory -Force -Path $hooks | Out-Null
+          Invoke-WebRequest -UseBasicParsing "https://goatcorp.github.io/dalamud-distrib/latest.zip" -OutFile "$env:RUNNER_TEMP/dalamud.zip"
+          Expand-Archive "$env:RUNNER_TEMP/dalamud.zip" -DestinationPath $hooks -Force
+
       - name: Test geometry core
         run: dotnet test PositionalPilot.Tests/PositionalPilot.Tests.csproj --configuration Release --no-restore
 
