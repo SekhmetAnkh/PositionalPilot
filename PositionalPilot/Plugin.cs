@@ -27,13 +27,14 @@ public sealed class Plugin : IDalamudPlugin
         IDalamudPluginInterface pluginInterface,
         ICommandManager commands,
         IClientState clientState,
+        IObjectTable objects,
         ITargetManager targets,
         ICondition condition,
         IFramework framework,
         IChatGui chat,
         IPluginLog log)
     {
-        services = new PluginServices(pluginInterface, commands, clientState, targets, condition, framework, chat, log);
+        services = new PluginServices(pluginInterface, commands, clientState, objects, targets, condition, framework, chat, log);
         config = pluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         config.Initialize(pluginInterface);
         logger = new ThrottledLogger(services);

@@ -20,7 +20,7 @@ internal sealed class GameStateReader
 
     public GameSnapshot Read()
     {
-        var player = services.ClientState.LocalPlayer;
+        var player = services.Objects.LocalPlayer;
         var target = services.Targets.Target as IBattleChara;
         var now = DateTime.UtcNow;
 

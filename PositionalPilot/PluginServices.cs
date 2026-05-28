@@ -12,6 +12,7 @@ internal sealed class PluginServices
         IDalamudPluginInterface pluginInterface,
         ICommandManager commands,
         IClientState clientState,
+        IObjectTable objects,
         ITargetManager targets,
         ICondition condition,
         IFramework framework,
@@ -21,6 +22,7 @@ internal sealed class PluginServices
         PluginInterface = pluginInterface;
         Commands = commands;
         ClientState = clientState;
+        Objects = objects;
         Targets = targets;
         Condition = condition;
         Framework = framework;
@@ -31,6 +33,7 @@ internal sealed class PluginServices
     public IDalamudPluginInterface PluginInterface { get; }
     public ICommandManager Commands { get; }
     public IClientState ClientState { get; }
+    public IObjectTable Objects { get; }
     public ITargetManager Targets { get; }
     public ICondition Condition { get; }
     public IFramework Framework { get; }
