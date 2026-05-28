@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
     <TargetFramework>net9.0-windows</TargetFramework>
     <LangVersion>latest</LangVersion>
@@ -7,31 +7,15 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>PositionalPilot</AssemblyName>
     <RootNamespace>PositionalPilot</RootNamespace>
+    <Version>0.1.0</Version>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.0</FileVersion>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-    <DalamudLibPath Condition="'$(DalamudLibPath)' == ''">$(APPDATA)\XIVLauncher\addon\Hooks\dev\</DalamudLibPath>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PositionalPilot.Core\PositionalPilot.Core.csproj" />
-    <Reference Include="Dalamud">
-      <HintPath>$(DalamudLibPath)Dalamud.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Dalamud.Bindings.ImGui">
-      <HintPath>$(DalamudLibPath)Dalamud.Bindings.ImGui.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="FFXIVClientStructs">
-      <HintPath>$(DalamudLibPath)FFXIVClientStructs.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Lumina">
-      <HintPath>$(DalamudLibPath)Lumina.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Lumina.Excel">
-      <HintPath>$(DalamudLibPath)Lumina.Excel.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
+    <PackageReference Include="DalamudPackager" Version="15.0.0" PrivateAssets="all" />
   </ItemGroup>
 </Project>

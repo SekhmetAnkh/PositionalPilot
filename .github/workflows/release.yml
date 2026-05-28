@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore
+        run: dotnet restore PositionalPilot.sln
+
+      - name: Test geometry core
+        run: dotnet test PositionalPilot.Tests/PositionalPilot.Tests.csproj --configuration Release --no-restore
+
+      - name: Build plugin package
+        run: dotnet build PositionalPilot/PositionalPilot.csproj --configuration Release --no-restore
+
+      - name: Locate Dalamud package
+        id: package
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -Path PositionalPilot -Recurse -Filter latest.zip | Select-Object -First 1
+          if (-not $zip) {
+            throw "DalamudPackager did not produce latest.zip"
+          }
+          "zip=$($zip.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Publish release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.package.outputs.zip }}
+          name: PositionalPilot ${{ github.ref_name || 'manual' }}
+          tag_name: ${{ github.ref_name || 'manual-build' }}
+          make_latest: true
