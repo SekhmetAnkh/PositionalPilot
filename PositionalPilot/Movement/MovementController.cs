@@ -204,25 +204,38 @@ internal sealed class MovementController
 
         var navTolerance = GetVnavmeshTolerance();
         var pathable = candidates
+            .Where(c => HasPositionalToleranceBuffer(target, c, navTolerance))
             .Where(c => vnavmesh.CanPathfind(snapshot.PlayerPosition, c.Position, navTolerance, out _))
             .ToArray();
 
         if (pathable.Length == 0)
         {
-            candidateFailureReason = $"no vnavmesh path to {candidates.Length} safe candidate(s)";
+            candidateFailureReason = $"no vnavmesh-pathable candidate with positional buffer from {candidates.Length} safe candidate(s)";
             currentCandidate = null;
-            logger.Debug(config, "candidate-count", $"BossMod-safe candidates: {candidates.Length}; vnavmesh-pathable: 0; tolerance={navTolerance:F2}");
+            logger.Debug(config, "candidate-count", $"BossMod-safe candidates: {candidates.Length}; buffered vnavmesh-pathable: 0; tolerance={navTolerance:F2}");
             return null;
         }
 
         currentCandidate = PositionalGeometry.ApplyHysteresis(currentCandidate, pathable, config.Settings, c =>
             bossMod.IsPositionSafe(c.Position) &&
+            HasPositionalToleranceBuffer(target, c, navTolerance) &&
             vnavmesh.CanPathfind(snapshot.PlayerPosition, c.Position, navTolerance, out _));
-        logger.Debug(config, "candidate-count", $"BossMod-safe candidates: {candidates.Length}; vnavmesh-pathable: {pathable.Length}; selected: {currentCandidate?.Position.ToString() ?? "none"}");
+        logger.Debug(config, "candidate-count", $"BossMod-safe candidates: {candidates.Length}; buffered vnavmesh-pathable: {pathable.Length}; selected: {currentCandidate?.Position.ToString() ?? "none"}");
         return currentCandidate;
     }
 
     private float GetVnavmeshTolerance() => MathF.Max(config.Settings.StopWithinYalms, 1.0f);
+
+    private static bool HasPositionalToleranceBuffer(TargetSnapshot target, Candidate candidate, float moveTolerance)
+    {
+        if (candidate.Requirement == PositionalRequirement.Any)
+            return true;
+
+        var radius = MathF.Max(0.1f, PositionalGeometry.DistanceXZ(target.Position, candidate.Position));
+        var toleranceAngle = MathF.Asin(MathF.Min(1.0f, moveTolerance / radius));
+        var guardAngle = 2.0f * MathF.PI / 180.0f;
+        return candidate.AngularDeviationRadians + toleranceAngle + guardAngle <= MathF.PI / 4f;
+    }
 
     private void EnterCooldown()
     {

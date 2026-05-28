@@ -33,6 +33,14 @@ public sealed class PositionalGeometryTests
     }
 
     [Fact]
+    public void SectorMarginRejectsRearEdge()
+    {
+        var accepted = PositionalGeometry.AngleMatchesRequirement(MathF.PI * 0.75f, 0, PositionalRequirement.Rear, 12, out _);
+
+        Assert.False(accepted);
+    }
+
+    [Fact]
     public void CandidateGenerationRespectsMaxMoveDistance()
     {
         var settings = new PositionalPilotSettings { CandidateCount = 24, MaxMoveDistance = 1 };

@@ -158,6 +158,7 @@ internal sealed class ConfigWindow
         ImGui.DragFloat("Max move distance", ref config.Settings.MaxMoveDistance, 0.1f, 0.5f, 20f);
         ImGui.DragFloat("Distance from hitbox", ref config.Settings.DesiredDistanceFromTargetHitbox, 0.1f, 0.1f, 10f);
         ImGui.DragFloat("Candidate ring extra", ref config.Settings.CandidateRingExtraDistance, 0.1f, 0f, 10f);
+        ImGui.DragFloat("Sector margin degrees", ref config.Settings.PositionalSectorMarginDegrees, 0.5f, 0f, 30f);
         ImGui.DragInt("Candidate count", ref config.Settings.CandidateCount, 1, 8, 96);
         ImGui.DragInt("Repath cooldown ms", ref config.Settings.RepathCooldownMs, 10, 100, 5000);
         ImGui.DragFloat("Minimum improvement", ref config.Settings.MinimumImprovementYalms, 0.05f, 0f, 5f);

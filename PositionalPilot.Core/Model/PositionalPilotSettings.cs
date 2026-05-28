@@ -9,6 +9,7 @@ public sealed class PositionalPilotSettings
     public float MaxMoveDistance = 6.0f;
     public float DesiredDistanceFromTargetHitbox = 2.2f;
     public float CandidateRingExtraDistance = 1.5f;
+    public float PositionalSectorMarginDegrees = 12.0f;
     public int CandidateCount = 24;
     public int RepathCooldownMs = 500;
     public float MinimumImprovementYalms = 0.75f;

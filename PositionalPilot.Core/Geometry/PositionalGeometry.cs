@@ -21,7 +21,7 @@ public static class PositionalGeometry
         for (var i = 0; i < settings.CandidateCount; i++)
         {
             var angle = i * TwoPi / settings.CandidateCount;
-            if (!AngleMatchesRequirement(angle, target.RotationRadians, requirement, out var deviation))
+            if (!AngleMatchesRequirement(angle, target.RotationRadians, requirement, settings.PositionalSectorMarginDegrees, out var deviation))
                 continue;
 
             var point = target.Position + new Vector3(MathF.Sin(angle) * radius, 0, MathF.Cos(angle) * radius);
@@ -40,6 +40,14 @@ public static class PositionalGeometry
         float worldAngle,
         float targetRotation,
         PositionalRequirement requirement,
+        out float deviation) =>
+        AngleMatchesRequirement(worldAngle, targetRotation, requirement, 0, out deviation);
+
+    public static bool AngleMatchesRequirement(
+        float worldAngle,
+        float targetRotation,
+        PositionalRequirement requirement,
+        float sectorMarginDegrees,
         out float deviation)
     {
         deviation = 0;
@@ -52,17 +60,18 @@ public static class PositionalGeometry
         var rear = NormalizeAngle(targetRotation + MathF.PI);
         var leftFlank = NormalizeAngle(targetRotation + MathF.PI / 2f);
         var rightFlank = NormalizeAngle(targetRotation - MathF.PI / 2f);
+        var sectorHalfAngle = MathF.Max(0, MathF.PI / 4f - DegreesToRadians(sectorMarginDegrees));
 
         if (requirement == PositionalRequirement.Rear)
         {
             deviation = AbsAngleDelta(worldAngle, rear);
-            return deviation <= MathF.PI / 4f;
+            return deviation <= sectorHalfAngle;
         }
 
         var leftDev = AbsAngleDelta(worldAngle, leftFlank);
         var rightDev = AbsAngleDelta(worldAngle, rightFlank);
         deviation = MathF.Min(leftDev, rightDev);
-        return deviation <= MathF.PI / 4f;
+        return deviation <= sectorHalfAngle;
     }
 
     public static PositionalRequirement MapBossModPositional(int raw)
@@ -110,4 +119,6 @@ public static class PositionalGeometry
         angle %= TwoPi;
         return angle < 0 ? angle + TwoPi : angle;
     }
+
+    private static float DegreesToRadians(float degrees) => degrees * MathF.PI / 180f;
 }
