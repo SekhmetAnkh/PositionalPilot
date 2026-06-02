@@ -52,7 +52,7 @@ RotationSolverReborn:
 
 No pull/query-style IPC for next action, next positional, current rotation state, GCD prediction, or target selection was found. PositionalPilot subscribes to the action-change events and caches the latest next GCD.
 
-The local positional action map mirrors RotationSolverReborn's melee positional table for DRG, MNK, NIN, RPR, SAM, and VPR. Unknown action IDs never trigger NoCasting.
+The local positional action map mirrors RotationSolverReborn's melee positional table for DRG, MNK, NIN, RPR, SAM, and VPR. Fresh known next-GCD positionals can drive movement toward that slice. Unknown action IDs never trigger NoCasting.
 
 Avarice:
 
@@ -106,7 +106,8 @@ The repository manifest points to the latest GitHub release asset named `latest.
 - Movement uses a single rear/flank border destination per update and does not probe multiple vnavmesh paths.
 - Safety/dependency checks are cached briefly to avoid polling BossMod/vnavmesh every frame.
 - Targets whose `BNpcBase.IsOmnidirectional` flag is true are treated as not requiring positionals, so assist movement is blocked.
-- RotationSolver coordination is off by default; enabling it may briefly request NoCasting only when the next cached RSR GCD is a known Rear/Flank positional, the player is not already in that slice, and True North is not available.
+- Fresh known RotationSolver next-GCD positionals can select the movement slice even when BossMod recommends `Any`, so PositionalPilot can pre-position instead of relying on True North.
+- RotationSolver NoCasting coordination is off by default; enabling it may briefly request NoCasting only when the next cached RSR GCD is a known Rear/Flank positional, the player is not already in that slice, and True North is not available.
 - Avarice is not required because it does not expose the needed rear/flank/range IPC.
 - RotationSolverReborn is used for `NoCasting` coordination only; no next-positional query IPC was found, so event data can be stale or unavailable.
 - The overlay is a simple text overlay, not a world-space marker.

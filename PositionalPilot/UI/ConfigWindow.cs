@@ -133,6 +133,8 @@ internal sealed class ConfigWindow
         ImGui.TextUnformatted($"Target positionals: {positionals}");
         ImGui.TextUnformatted($"Target hitbox: {s.TargetHitboxRadius:F2}");
         ImGui.TextUnformatted($"Recommended positional: {controller.CurrentPositional}");
+        ImGui.TextUnformatted($"Movement positional: {controller.CurrentMovementPositional}");
+        ImGui.TextUnformatted($"Movement source: {controller.CurrentMovementPositionalSource}");
         ImGui.TextUnformatted($"Border side: {controller.CurrentBorderSide}");
         ImGui.TextUnformatted($"Chosen destination: {controller.ChosenDestination?.ToString() ?? "none"}");
         ImGui.TextUnformatted($"Movement state: {controller.State}");

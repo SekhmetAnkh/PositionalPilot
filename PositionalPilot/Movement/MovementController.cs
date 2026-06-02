@@ -46,6 +46,8 @@ internal sealed class MovementController
     public Vector3? ChosenDestination => currentDestination?.Position;
     public CachedSafetyState LastCachedSafety => cachedSafety;
     public string LastNoCastingReason { get; private set; } = "not evaluated";
+    public PositionalRequirement CurrentMovementPositional { get; private set; } = PositionalRequirement.Unknown;
+    public string CurrentMovementPositionalSource { get; private set; } = "not evaluated";
     public RotationSolverNextActionInfo LastRotationSolverNextAction => rotationSolver.GetNextGcdActionInfo();
     public GameSnapshot LastSnapshot { get; private set; } = new(false, default, 0, 0, false, false, false, false, 0, string.Empty, 0, 0, default, 0, 0, null, false, false, false);
 
@@ -112,10 +114,11 @@ internal sealed class MovementController
         }
 
         CurrentPositional = positional;
+        var movementPositional = ResolveMovementPositional(positional);
 
         if (config.Settings.MovementMode == MovementMode.SuggestOnly)
         {
-            EvaluateDestination(LastSnapshot, positional);
+            EvaluateDestination(LastSnapshot, movementPositional);
             State = MovementState.Idle;
             return;
         }
@@ -126,7 +129,7 @@ internal sealed class MovementController
         var wasMoving = State == MovementState.Moving;
         var previousDestination = currentDestination?.Position;
         State = MovementState.Evaluating;
-        var selected = EvaluateDestination(LastSnapshot, positional);
+        var selected = EvaluateDestination(LastSnapshot, movementPositional);
         if (selected == null)
         {
             BlockReason = string.IsNullOrWhiteSpace(destinationFailureReason) ? "no safe destination" : destinationFailureReason;
@@ -181,7 +184,7 @@ internal sealed class MovementController
         BlockReason = string.Empty;
         State = MovementState.Moving;
         nextRepath = DateTime.UtcNow.AddMilliseconds(config.Settings.RepathCooldownMs);
-        logger.Debug(config, "movement-start", $"Moving to {selected.Position} for {positional}");
+        logger.Debug(config, "movement-start", $"Moving to {selected.Position} for {movementPositional} ({CurrentMovementPositionalSource})");
     }
 
     public void EmergencyStop()
@@ -318,6 +321,24 @@ internal sealed class MovementController
     }
 
     private float GetVnavmeshTolerance() => MathF.Max(config.Settings.StopWithinYalms, 1.0f);
+
+    private PositionalRequirement ResolveMovementPositional(PositionalRequirement bossModPositional)
+    {
+        CurrentMovementPositional = bossModPositional;
+        CurrentMovementPositionalSource = "BossMod";
+
+        var next = rotationSolver.GetNextGcdActionInfo();
+        if (!next.EventsAvailable)
+            return bossModPositional;
+        if (DateTime.UtcNow - next.NextGcdUpdatedAt > TimeSpan.FromMilliseconds(config.Settings.RsrNextActionMaxAgeMs))
+            return bossModPositional;
+        if (next.NextGcdRequirement is not (PositionalRequirement.Rear or PositionalRequirement.Flank))
+            return bossModPositional;
+
+        CurrentMovementPositional = next.NextGcdRequirement;
+        CurrentMovementPositionalSource = $"RSR next GCD: {next.NextGcdActionName}";
+        return next.NextGcdRequirement;
+    }
 
     private void MaybeTriggerNoCasting(GameSnapshot snapshot, BorderDestination selected)
     {
