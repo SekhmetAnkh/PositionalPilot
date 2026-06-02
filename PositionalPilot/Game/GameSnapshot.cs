@@ -13,8 +13,11 @@ internal sealed record GameSnapshot(
     bool HasTarget,
     ulong TargetId,
     string TargetName,
+    uint TargetBaseId,
+    uint TargetDataId,
     Vector3 TargetPosition,
     float TargetRotation,
     float TargetHitboxRadius,
+    bool? TargetOmnidirectional,
     bool TargetAlive,
     bool TargetTargetable);

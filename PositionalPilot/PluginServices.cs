@@ -14,6 +14,7 @@ internal sealed class PluginServices
         IClientState clientState,
         IObjectTable objects,
         ITargetManager targets,
+        IDataManager data,
         ICondition condition,
         IFramework framework,
         IChatGui chat,
@@ -24,6 +25,7 @@ internal sealed class PluginServices
         ClientState = clientState;
         Objects = objects;
         Targets = targets;
+        Data = data;
         Condition = condition;
         Framework = framework;
         Chat = chat;
@@ -35,6 +37,7 @@ internal sealed class PluginServices
     public IClientState ClientState { get; }
     public IObjectTable Objects { get; }
     public ITargetManager Targets { get; }
+    public IDataManager Data { get; }
     public ICondition Condition { get; }
     public IFramework Framework { get; }
     public IChatGui Chat { get; }

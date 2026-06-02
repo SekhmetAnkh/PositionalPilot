@@ -17,6 +17,9 @@ internal sealed class MovementController
     private readonly ThrottledLogger logger;
 
     private DateTime nextRepath = DateTime.MinValue;
+    private DateTime nextDependencyRefresh = DateTime.MinValue;
+    private DateTime nextSafetyRefresh = DateTime.MinValue;
+    private CachedSafetyState cachedSafety = CachedSafetyState.Empty;
     private ulong lastTargetId;
     private BorderDestination? currentDestination;
     private BorderSide selectedSide = BorderSide.None;
@@ -40,11 +43,12 @@ internal sealed class MovementController
     public PositionalRequirement CurrentPositional { get; private set; } = PositionalRequirement.Unknown;
     public BorderSide CurrentBorderSide => selectedSide;
     public Vector3? ChosenDestination => currentDestination?.Position;
-    public GameSnapshot LastSnapshot { get; private set; } = new(false, default, 0, 0, false, false, false, false, 0, string.Empty, default, 0, 0, false, false);
+    public CachedSafetyState LastCachedSafety => cachedSafety;
+    public GameSnapshot LastSnapshot { get; private set; } = new(false, default, 0, 0, false, false, false, false, 0, string.Empty, 0, 0, default, 0, 0, null, false, false);
 
     public void Update()
     {
-        RefreshDependencyStatus();
+        RefreshDependencyStatus(false);
         LastSnapshot = game.Read();
 
         if (State == MovementState.EmergencyStopped)
@@ -55,22 +59,35 @@ internal sealed class MovementController
             Stop("target changed");
             currentDestination = null;
             selectedSide = BorderSide.None;
+            cachedSafety = CachedSafetyState.Empty;
+            nextSafetyRefresh = DateTime.MinValue;
         }
 
         if (LastSnapshot.HasTarget)
             lastTargetId = LastSnapshot.TargetId;
 
+        if (TryBlockWithoutIpc(LastSnapshot, out var earlyReason))
+        {
+            BlockReason = earlyReason;
+            if (State == MovementState.Moving)
+                Stop(earlyReason);
+            State = State == MovementState.Cooldown ? State : MovementState.Blocked;
+            return;
+        }
+
+        RefreshSafetyState(false);
+
         if (config.Settings.DisableDuringManualMovement &&
             State == MovementState.Moving &&
             LastSnapshot.IsManuallyMoving &&
-            !vnavmesh.IsNavigating())
+            !cachedSafety.VnavmeshNavigating)
         {
             Stop("manual movement detected");
             EnterCooldown();
             return;
         }
 
-        if (!safety.CanEvaluate(LastSnapshot, out var reason))
+        if (!safety.CanEvaluate(LastSnapshot, cachedSafety, out var reason))
         {
             BlockReason = reason;
             if (State == MovementState.Moving)
@@ -79,7 +96,8 @@ internal sealed class MovementController
             return;
         }
 
-        if (!bossMod.TryGetRecommendedPositional(out var positional) ||
+        var positional = cachedSafety.Positional;
+        if (!cachedSafety.HasPositional ||
             positional is PositionalRequirement.None or PositionalRequirement.Unknown)
         {
             CurrentPositional = positional;
@@ -113,24 +131,30 @@ internal sealed class MovementController
             return;
         }
 
-        if (!safety.CanMoveTo(LastSnapshot, selected.Position, out reason))
+        RefreshSafetyState(true);
+        if (!safety.CanMoveTo(LastSnapshot, cachedSafety, selected.Position, out reason))
         {
             BlockReason = reason;
             State = MovementState.Blocked;
             return;
         }
 
-        if (PositionalGeometry.DistanceXZ(LastSnapshot.PlayerPosition, selected.Position) <= config.Settings.StopWithinYalms)
+        if (PositionalGeometry.DistanceXZ(LastSnapshot.PlayerPosition, selected.Position) <= config.Settings.HoldDeadzoneYalms)
         {
-            Stop("destination reached");
+            if (wasMoving && cachedSafety.VnavmeshNavigating)
+                Stop("hold deadzone reached");
+            else
+                BlockReason = "within hold deadzone";
+
             State = MovementState.Idle;
+            nextRepath = DateTime.UtcNow.AddMilliseconds(config.Settings.RepathCooldownMs);
             return;
         }
 
         if (wasMoving &&
-            vnavmesh.IsNavigating() &&
+            cachedSafety.VnavmeshNavigating &&
             previousDestination.HasValue &&
-            PositionalGeometry.DistanceXZ(previousDestination.Value, selected.Position) < config.Settings.RetargetThresholdYalms)
+            PositionalGeometry.DistanceXZ(previousDestination.Value, selected.Position) < config.Settings.DestinationChangeThresholdYalms)
         {
             BlockReason = string.Empty;
             nextRepath = DateTime.UtcNow.AddMilliseconds(config.Settings.RepathCooldownMs);
@@ -168,11 +192,15 @@ internal sealed class MovementController
         config.Save();
     }
 
-    public void RefreshDependencyStatus()
+    public void RefreshDependencyStatus(bool force)
     {
+        if (!force && DateTime.UtcNow < nextDependencyRefresh)
+            return;
+
         bossMod.RefreshAvailability();
         vnavmesh.RefreshAvailability();
         rotationSolver.RefreshAvailability();
+        nextDependencyRefresh = DateTime.UtcNow.AddMilliseconds(config.Settings.DependencyRefreshMs);
     }
 
     public void ClearEmergencyStop()
@@ -232,6 +260,59 @@ internal sealed class MovementController
         currentDestination = destination;
         logger.Debug(config, "border-destination", $"Selected {destination.Position} on {selectedSide} border for {positional}");
         return currentDestination;
+    }
+
+    private bool TryBlockWithoutIpc(GameSnapshot snapshot, out string reason)
+    {
+        var settings = config.Settings;
+        if (!settings.Enabled)
+            return Block("plugin disabled", out reason);
+        if (settings.MovementMode == MovementMode.Disabled)
+            return Block("movement mode disabled", out reason);
+        if (!snapshot.HasPlayer)
+            return Block("player unavailable", out reason);
+        if (!snapshot.HasTarget)
+            return Block("no current target", out reason);
+        if (settings.OnlyInCombat && !snapshot.InCombat)
+            return Block("not in combat", out reason);
+        if (settings.OnlyMeleeJobs && !GameStateReader.IsMeleeJob(snapshot.JobId))
+            return Block($"not a melee job (job {snapshot.JobId})", out reason);
+        if (snapshot.TargetOmnidirectional == true)
+            return Block("target does not require positionals", out reason);
+
+        reason = string.Empty;
+        return false;
+    }
+
+    private static bool Block(string value, out string reason)
+    {
+        reason = value;
+        return true;
+    }
+
+    private void RefreshSafetyState(bool force)
+    {
+        if (!force && DateTime.UtcNow < nextSafetyRefresh)
+            return;
+
+        var hasPositional = bossMod.TryGetRecommendedPositional(out var positional);
+        var nextDamage = bossMod.TryGetNextDamageIn(out var damage) ? damage : (float?)null;
+        var nextKnockback = bossMod.TryGetNextKnockbackIn(out var knockback) ? knockback : (float?)null;
+        var nextDowntime = bossMod.TryGetNextDowntimeIn(out var downtime) ? downtime : (float?)null;
+
+        cachedSafety = new CachedSafetyState(
+            vnavmesh.IsReady(),
+            vnavmesh.IsNavigating(),
+            bossMod.IsBossModNavigating(),
+            bossMod.TryGetBossModNaviTarget(out _),
+            rotationSolver.Available,
+            hasPositional,
+            positional,
+            nextDamage,
+            nextKnockback,
+            nextDowntime,
+            DateTime.UtcNow);
+        nextSafetyRefresh = DateTime.UtcNow.AddMilliseconds(config.Settings.SafetyRefreshMs);
     }
 
     private float GetVnavmeshTolerance() => MathF.Max(config.Settings.StopWithinYalms, 1.0f);

@@ -121,14 +121,28 @@ internal sealed class ConfigWindow
     private void DrawCurrentState()
     {
         var s = controller.LastSnapshot;
+        var positionals = s.TargetOmnidirectional switch
+        {
+            true => "not required",
+            false => "required",
+            _ => "unknown",
+        };
         ImGui.TextUnformatted("Current state");
         ImGui.TextUnformatted($"Target: {(s.HasTarget ? s.TargetName : "none")}");
+        ImGui.TextUnformatted($"Target positionals: {positionals}");
         ImGui.TextUnformatted($"Target hitbox: {s.TargetHitboxRadius:F2}");
         ImGui.TextUnformatted($"Recommended positional: {controller.CurrentPositional}");
         ImGui.TextUnformatted($"Border side: {controller.CurrentBorderSide}");
         ImGui.TextUnformatted($"Chosen destination: {controller.ChosenDestination?.ToString() ?? "none"}");
         ImGui.TextUnformatted($"Movement state: {controller.State}");
         ImGui.TextUnformatted($"Block reason: {controller.BlockReason}");
+        if (config.Settings.DebugLogging)
+        {
+            var cacheAge = controller.LastCachedSafety.UpdatedAt == DateTime.MinValue
+                ? "never"
+                : $"{(DateTime.UtcNow - controller.LastCachedSafety.UpdatedAt).TotalMilliseconds:F0}ms";
+            ImGui.TextDisabled($"Safety cache age: {cacheAge}");
+        }
     }
 
     private void DrawSafety()
@@ -166,7 +180,10 @@ internal sealed class ConfigWindow
         ImGui.DragFloat("Max move distance", ref config.Settings.MaxMoveDistance, 0.1f, 0.5f, 20f);
         ImGui.DragFloat("Distance from hitbox", ref config.Settings.DesiredDistanceFromTargetHitbox, 0.1f, 0.1f, 10f);
         ImGui.DragFloat("Positional nudge degrees", ref config.Settings.PositionalNudgeDegrees, 0.5f, 0f, 30f);
-        ImGui.DragFloat("Retarget threshold", ref config.Settings.RetargetThresholdYalms, 0.05f, 0.05f, 3f);
+        ImGui.DragFloat("Hold deadzone", ref config.Settings.HoldDeadzoneYalms, 0.05f, 0.05f, 5f);
+        ImGui.DragFloat("Destination change threshold", ref config.Settings.DestinationChangeThresholdYalms, 0.05f, 0.05f, 5f);
+        ImGui.DragInt("Dependency refresh ms", ref config.Settings.DependencyRefreshMs, 50, 250, 10000);
+        ImGui.DragInt("Safety refresh ms", ref config.Settings.SafetyRefreshMs, 25, 100, 5000);
         ImGui.DragInt("Repath cooldown ms", ref config.Settings.RepathCooldownMs, 10, 100, 5000);
         ImGui.DragFloat("Stop within yalms", ref config.Settings.StopWithinYalms, 0.05f, 0.05f, 3f);
         CheckboxSetting("Coordinate with RotationSolver", v => config.Settings.EnableRotationSolverCoordination = v, config.Settings.EnableRotationSolverCoordination);

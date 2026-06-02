@@ -1,6 +1,7 @@
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.Types;
 using System.Numerics;
+using Lumina.Excel.Sheets;
 using PositionalPilot.Core.Geometry;
 
 namespace PositionalPilot.Game;
@@ -48,13 +49,18 @@ internal sealed class GameStateReader
                 false,
                 0,
                 string.Empty,
+                0,
+                0,
                 default,
                 0,
                 0,
+                null,
                 false,
                 false);
         }
 
+        var targetBaseId = target.BaseId;
+        var targetDataId = target.DataId;
         return new GameSnapshot(
             true,
             playerPos,
@@ -66,9 +72,12 @@ internal sealed class GameStateReader
             true,
             target.GameObjectId,
             target.Name.ToString(),
+            targetBaseId,
+            targetDataId,
             target.Position,
             target.Rotation,
             target.HitboxRadius,
+            TryGetTargetOmnidirectional(targetBaseId),
             target.CurrentHp > 0,
             target.IsTargetable);
     }
@@ -86,9 +95,33 @@ internal sealed class GameStateReader
         false,
         0,
         string.Empty,
+        0,
+        0,
         default,
         0,
         0,
+        null,
         false,
         false);
+
+    private bool? TryGetTargetOmnidirectional(uint targetBaseId)
+    {
+        if (targetBaseId == 0)
+            return null;
+
+        try
+        {
+            var sheet = services.Data.GetExcelSheet<BNpcBase>();
+            if (sheet == null)
+                return null;
+
+            var row = sheet.GetRowOrDefault(targetBaseId);
+            return row?.IsOmnidirectional;
+        }
+        catch (Exception ex)
+        {
+            services.Log.Debug(ex, "Failed to read BNpcBase omnidirectional flag for {BaseId}", targetBaseId);
+            return null;
+        }
+    }
 }

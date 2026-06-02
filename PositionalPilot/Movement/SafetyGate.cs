@@ -21,7 +21,7 @@ internal sealed class SafetyGate
         this.rotationSolver = rotationSolver;
     }
 
-    public bool CanEvaluate(GameSnapshot snapshot, out string reason)
+    public bool CanEvaluate(GameSnapshot snapshot, CachedSafetyState safety, out string reason)
     {
         var s = config.Settings;
         if (!s.Enabled)
@@ -36,23 +36,25 @@ internal sealed class SafetyGate
             return Block("not in combat", out reason);
         if (s.OnlyMeleeJobs && !GameStateReader.IsMeleeJob(snapshot.JobId))
             return Block($"not a melee job (job {snapshot.JobId})", out reason);
-        if (s.RequiredDependencies.HasFlag(RequiredDependencies.RequireVnavmesh) && !vnavmesh.IsReady())
+        if (snapshot.TargetOmnidirectional == true)
+            return Block("target does not require positionals", out reason);
+        if (s.RequiredDependencies.HasFlag(RequiredDependencies.RequireVnavmesh) && !safety.VnavmeshReady)
             return Block("vnavmesh unavailable or navmesh not ready", out reason);
-        if (s.RequiredDependencies.HasFlag(RequiredDependencies.RequireBossModSafety) && !bossMod.TryGetRecommendedPositional(out _))
+        if (s.RequiredDependencies.HasFlag(RequiredDependencies.RequireBossModSafety) && !safety.HasPositional)
             return Block("BossMod safety/positional unavailable", out reason);
-        if (s.RequiredDependencies.HasFlag(RequiredDependencies.RequireCombatSolver) && !rotationSolver.Available)
+        if (s.RequiredDependencies.HasFlag(RequiredDependencies.RequireCombatSolver) && !safety.RotationSolverAvailable)
             return Block("RotationSolverReborn unavailable", out reason);
         if (s.DisableDuringCasting && snapshot.IsCasting)
             return Block("player is casting", out reason);
-        if (s.DisableDuringUpcomingDamage && bossMod.TryGetNextDamageIn(out var damage) && damage <= s.UpcomingDamageBlockSeconds)
+        if (s.DisableDuringUpcomingDamage && safety.NextDamageIn is { } damage && damage <= s.UpcomingDamageBlockSeconds)
             return Block($"damage in {damage:F1}s", out reason);
-        if (s.DisableDuringUpcomingKnockback && bossMod.TryGetNextKnockbackIn(out var knockback) && knockback <= s.UpcomingKnockbackBlockSeconds)
+        if (s.DisableDuringUpcomingKnockback && safety.NextKnockbackIn is { } knockback && knockback <= s.UpcomingKnockbackBlockSeconds)
             return Block($"knockback in {knockback:F1}s", out reason);
-        if (s.DisableDuringDowntime && bossMod.TryGetNextDowntimeIn(out var downtime) && downtime <= 0)
+        if (s.DisableDuringDowntime && safety.NextDowntimeIn is { } downtime && downtime <= 0)
             return Block("encounter downtime active", out reason);
-        if (bossMod.IsBossModNavigating())
+        if (safety.BossModNavigating)
             return Block("BossMod currently owns navigation", out reason);
-        if (bossMod.TryGetBossModNaviTarget(out _))
+        if (safety.BossModHasNaviTarget)
             return Block("BossMod has navigation target", out reason);
         if (!snapshot.TargetAlive || !snapshot.TargetTargetable)
             return Block("target not alive/targetable", out reason);
@@ -63,9 +65,9 @@ internal sealed class SafetyGate
         return true;
     }
 
-    public bool CanMoveTo(GameSnapshot snapshot, Vector3 destination, out string reason)
+    public bool CanMoveTo(GameSnapshot snapshot, CachedSafetyState safety, Vector3 destination, out string reason)
     {
-        if (!CanEvaluate(snapshot, out reason))
+        if (!CanEvaluate(snapshot, safety, out reason))
             return false;
 
         var distance = PositionalGeometry.DistanceXZ(snapshot.PlayerPosition, destination);
