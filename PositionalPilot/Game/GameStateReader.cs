@@ -1,13 +1,15 @@
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.Types;
 using System.Numerics;
+using FFXIVClientStructs.FFXIV.Client.Game;
 using Lumina.Excel.Sheets;
 using PositionalPilot.Core.Geometry;
 
 namespace PositionalPilot.Game;
 
-internal sealed class GameStateReader
+internal sealed unsafe class GameStateReader
 {
+    private const uint TrueNorthActionId = 7546;
     private readonly PluginServices services;
     private Vector3 lastPlayerPosition;
     private DateTime lastPositionSample = DateTime.MinValue;
@@ -56,7 +58,8 @@ internal sealed class GameStateReader
                 0,
                 null,
                 false,
-                false);
+                false,
+                IsTrueNorthAvailable());
         }
 
         var targetBaseId = target.BaseId;
@@ -79,7 +82,8 @@ internal sealed class GameStateReader
             target.HitboxRadius,
             TryGetTargetOmnidirectional(targetBaseId),
             target.CurrentHp > 0,
-            target.IsTargetable);
+            target.IsTargetable,
+            IsTrueNorthAvailable());
     }
 
     public static bool IsMeleeJob(uint jobId) => MeleeJobs.Contains(jobId);
@@ -102,7 +106,23 @@ internal sealed class GameStateReader
         0,
         null,
         false,
+        false,
         false);
+
+    private bool IsTrueNorthAvailable()
+    {
+        try
+        {
+            var actionManager = ActionManager.Instance();
+            return actionManager != null &&
+                   actionManager->GetActionStatus(ActionType.Action, TrueNorthActionId) == 0;
+        }
+        catch (Exception ex)
+        {
+            services.Log.Debug(ex, "Failed to read True North availability");
+            return false;
+        }
+    }
 
     private bool? TryGetTargetOmnidirectional(uint targetBaseId)
     {

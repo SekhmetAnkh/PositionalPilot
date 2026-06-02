@@ -107,6 +107,7 @@ internal sealed class ConfigWindow
         ImGui.TextUnformatted("Dependencies");
         DrawDependency("BossModReborn", bossMod.Available, bossMod.LastError);
         DrawDependency("RotationSolverReborn", rotationSolver.Available, rotationSolver.LastError);
+        DrawDependency("RSR next-GCD events", rotationSolver.NextActionEventsAvailable, rotationSolver.EventLastError);
         DrawDependency("vnavmesh", vnavmesh.Available, vnavmesh.LastError);
         DrawDependency("Avarice", avarice.Available, avarice.LastError ?? "optional; only CardinalDirection IPC found");
     }
@@ -136,12 +137,22 @@ internal sealed class ConfigWindow
         ImGui.TextUnformatted($"Chosen destination: {controller.ChosenDestination?.ToString() ?? "none"}");
         ImGui.TextUnformatted($"Movement state: {controller.State}");
         ImGui.TextUnformatted($"Block reason: {controller.BlockReason}");
+        var next = controller.LastRotationSolverNextAction;
+        var nextAge = next.NextGcdUpdatedAt == DateTime.MinValue
+            ? "never"
+            : $"{(DateTime.UtcNow - next.NextGcdUpdatedAt).TotalMilliseconds:F0}ms";
+        ImGui.TextUnformatted($"RSR next GCD: {next.NextGcdActionName} ({next.NextGcdActionId})");
+        ImGui.TextUnformatted($"RSR next positional: {next.NextGcdRequirement}");
+        ImGui.TextUnformatted($"RSR next GCD age: {nextAge}");
+        ImGui.TextUnformatted($"NoCasting: {controller.LastNoCastingReason}");
         if (config.Settings.DebugLogging)
         {
             var cacheAge = controller.LastCachedSafety.UpdatedAt == DateTime.MinValue
                 ? "never"
                 : $"{(DateTime.UtcNow - controller.LastCachedSafety.UpdatedAt).TotalMilliseconds:F0}ms";
             ImGui.TextDisabled($"Safety cache age: {cacheAge}");
+            ImGui.TextDisabled($"RSR next action: {next.NextActionName} ({next.NextActionId})");
+            ImGui.TextDisabled($"True North available: {s.TrueNorthAvailable}");
         }
     }
 
@@ -186,7 +197,10 @@ internal sealed class ConfigWindow
         ImGui.DragInt("Safety refresh ms", ref config.Settings.SafetyRefreshMs, 25, 100, 5000);
         ImGui.DragInt("Repath cooldown ms", ref config.Settings.RepathCooldownMs, 10, 100, 5000);
         ImGui.DragFloat("Stop within yalms", ref config.Settings.StopWithinYalms, 0.05f, 0.05f, 3f);
-        CheckboxSetting("Coordinate with RotationSolver", v => config.Settings.EnableRotationSolverCoordination = v, config.Settings.EnableRotationSolverCoordination);
+        CheckboxSetting("Coordinate with RotationSolver: NoCasting only for next positional GCD", v => config.Settings.EnableRotationSolverCoordination = v, config.Settings.EnableRotationSolverCoordination);
+        ImGui.DragInt("RSR next action max age ms", ref config.Settings.RsrNextActionMaxAgeMs, 25, 250, 5000);
+        ImGui.DragInt("NoCasting cooldown ms", ref config.Settings.NoCastingCooldownMs, 25, 250, 10000);
+        ImGui.DragFloat("NoCasting duration seconds", ref config.Settings.NoCastingDurationSeconds, 0.05f, 0.1f, 2f);
         if (ImGui.IsItemDeactivatedAfterEdit())
             config.Save();
     }

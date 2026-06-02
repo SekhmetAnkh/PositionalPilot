@@ -8,7 +8,7 @@ The plugin is off by default. It has no stealth, hiding, anti-detection, ban-eva
 
 - BossModReborn: required by default for recommended positional and safety checks.
 - vnavmesh: required by default for movement.
-- RotationSolverReborn / CombatReborn: optional by default; used only for coordination through special-state IPC.
+- RotationSolverReborn / CombatReborn: optional by default; used only for narrow NoCasting coordination when its next-GCD event indicates a known positional action.
 - Avarice: optional/reference-only. Source inspection found `Avarice.CardinalDirection` but no rear/flank/range movement IPC, so PositionalPilot uses local geometry.
 
 ## Verified IPC
@@ -45,10 +45,14 @@ RotationSolverReborn:
 
 - `RotationSolverReborn.TriggerSpecialState` -> `SpecialCommandType`
 - `RotationSolverReborn.TriggerSpecialStateWithDuration` -> `SpecialCommandType, float`
+- `RotationSolverReborn.ActionUpdater.NextGCDActionChanged` -> event payload `uint actionId`
+- `RotationSolverReborn.ActionUpdater.NextActionChanged` -> event payload `uint actionId`
 - `RotationSolverReborn.ChangeOperatingMode` -> `StateCommandType`
 - `RotationSolverReborn.ActionCommand` -> `string action, float time`
 
-No query-style IPC for next action, next positional, current rotation state, GCD prediction, or target selection was found.
+No pull/query-style IPC for next action, next positional, current rotation state, GCD prediction, or target selection was found. PositionalPilot subscribes to the action-change events and caches the latest next GCD.
+
+The local positional action map mirrors RotationSolverReborn's melee positional table for DRG, MNK, NIN, RPR, SAM, and VPR. Unknown action IDs never trigger NoCasting.
 
 Avarice:
 
@@ -102,7 +106,7 @@ The repository manifest points to the latest GitHub release asset named `latest.
 - Movement uses a single rear/flank border destination per update and does not probe multiple vnavmesh paths.
 - Safety/dependency checks are cached briefly to avoid polling BossMod/vnavmesh every frame.
 - Targets whose `BNpcBase.IsOmnidirectional` flag is true are treated as not requiring positionals, so assist movement is blocked.
-- RotationSolver coordination is off by default; enabling it may briefly request NoCasting during movement.
+- RotationSolver coordination is off by default; enabling it may briefly request NoCasting only when the next cached RSR GCD is a known Rear/Flank positional, the player is not already in that slice, and True North is not available.
 - Avarice is not required because it does not expose the needed rear/flank/range IPC.
-- RotationSolverReborn is used for `NoCasting` coordination only; no next-positional query IPC was found.
+- RotationSolverReborn is used for `NoCasting` coordination only; no next-positional query IPC was found, so event data can be stale or unavailable.
 - The overlay is a simple text overlay, not a world-space marker.

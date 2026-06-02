@@ -63,6 +63,7 @@ public sealed class Plugin : IDalamudPlugin
         services.PluginInterface.UiBuilder.Draw -= Draw;
         services.PluginInterface.UiBuilder.OpenConfigUi -= OpenConfig;
         services.Commands.RemoveHandler(CommandName);
+        rotationSolver.Dispose();
     }
 
     private void OnFrameworkUpdate(IFramework framework) => movement.Update();
@@ -141,7 +142,10 @@ public sealed class Plugin : IDalamudPlugin
             ? "never"
             : $"{(DateTime.UtcNow - movement.LastCachedSafety.UpdatedAt).TotalMilliseconds:F0}ms";
         services.Chat.Print($"PositionalPilot: enabled={config.Settings.Enabled}, mode={config.Settings.MovementMode}, state={movement.State}");
-        services.Chat.Print($"Deps: BossMod={bossMod.Available} ({bossMod.LastError ?? "ok"}), RSR={rotationSolver.Available} ({rotationSolver.LastError ?? "ok"}), vnavmesh={vnavmesh.Available} ({vnavmesh.LastError ?? "ok"}), Avarice={avarice.Available} ({avarice.LastError ?? "optional"})");
-        services.Chat.Print($"Target: {(snap.HasTarget ? snap.TargetName : "none")}, targetPositionals={positionals}, positional={movement.CurrentPositional}, border={movement.CurrentBorderSide}, destination={movement.ChosenDestination?.ToString() ?? "none"}, block={movement.BlockReason}, cacheAge={cacheAge}");
+        services.Chat.Print($"Deps: BossMod={bossMod.Available} ({bossMod.LastError ?? "ok"}), RSR={rotationSolver.Available} ({rotationSolver.LastError ?? "ok"}), RSRNext={rotationSolver.NextActionEventsAvailable} ({rotationSolver.EventLastError ?? "ok"}), vnavmesh={vnavmesh.Available} ({vnavmesh.LastError ?? "ok"}), Avarice={avarice.Available} ({avarice.LastError ?? "optional"})");
+        services.Chat.Print($"Target: {(snap.HasTarget ? snap.TargetName : "none")}, targetPositionals={positionals}, trueNorth={snap.TrueNorthAvailable}, positional={movement.CurrentPositional}, border={movement.CurrentBorderSide}, destination={movement.ChosenDestination?.ToString() ?? "none"}, block={movement.BlockReason}, cacheAge={cacheAge}");
+        var next = movement.LastRotationSolverNextAction;
+        var nextAge = next.NextGcdUpdatedAt == DateTime.MinValue ? "never" : $"{(DateTime.UtcNow - next.NextGcdUpdatedAt).TotalMilliseconds:F0}ms";
+        services.Chat.Print($"RSR next GCD: {next.NextGcdActionName} ({next.NextGcdActionId}), positional={next.NextGcdRequirement}, age={nextAge}, NoCasting={movement.LastNoCastingReason}");
     }
 }

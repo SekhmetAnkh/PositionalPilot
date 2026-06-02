@@ -26,6 +26,7 @@ internal sealed class MovementController
     private string destinationFailureReason = string.Empty;
     private Vector3? lastFailedPathDestination;
     private DateTime lastFailedPathTime = DateTime.MinValue;
+    private DateTime nextNoCastingAllowed = DateTime.MinValue;
 
     public MovementController(Configuration config, GameStateReader game, BossModIpc bossMod, VnavmeshIpc vnavmesh, RotationSolverIpc rotationSolver, ThrottledLogger logger)
     {
@@ -44,7 +45,9 @@ internal sealed class MovementController
     public BorderSide CurrentBorderSide => selectedSide;
     public Vector3? ChosenDestination => currentDestination?.Position;
     public CachedSafetyState LastCachedSafety => cachedSafety;
-    public GameSnapshot LastSnapshot { get; private set; } = new(false, default, 0, 0, false, false, false, false, 0, string.Empty, 0, 0, default, 0, 0, null, false, false);
+    public string LastNoCastingReason { get; private set; } = "not evaluated";
+    public RotationSolverNextActionInfo LastRotationSolverNextAction => rotationSolver.GetNextGcdActionInfo();
+    public GameSnapshot LastSnapshot { get; private set; } = new(false, default, 0, 0, false, false, false, false, 0, string.Empty, 0, 0, default, 0, 0, null, false, false, false);
 
     public void Update()
     {
@@ -174,8 +177,7 @@ internal sealed class MovementController
             return;
         }
 
-        if (config.Settings.EnableRotationSolverCoordination)
-            rotationSolver.PauseOrNoCasting(MathF.Max(0.25f, config.Settings.RepathCooldownMs / 1000f));
+        MaybeTriggerNoCasting(LastSnapshot, selected);
         BlockReason = string.Empty;
         State = MovementState.Moving;
         nextRepath = DateTime.UtcNow.AddMilliseconds(config.Settings.RepathCooldownMs);
@@ -316,6 +318,58 @@ internal sealed class MovementController
     }
 
     private float GetVnavmeshTolerance() => MathF.Max(config.Settings.StopWithinYalms, 1.0f);
+
+    private void MaybeTriggerNoCasting(GameSnapshot snapshot, BorderDestination selected)
+    {
+        LastNoCastingReason = GetNoCastingBlockReason(snapshot, selected, out var duration);
+        if (LastNoCastingReason != "triggered")
+        {
+            logger.Debug(config, "rsr-nocasting-skip", LastNoCastingReason);
+            return;
+        }
+
+        rotationSolver.PauseOrNoCasting(duration);
+        nextNoCastingAllowed = DateTime.UtcNow.AddMilliseconds(config.Settings.NoCastingCooldownMs);
+        logger.Debug(config, "rsr-nocasting", $"Triggered NoCasting for {rotationSolver.GetNextGcdActionInfo().NextGcdActionName}");
+    }
+
+    private string GetNoCastingBlockReason(GameSnapshot snapshot, BorderDestination selected, out float duration)
+    {
+        duration = 0;
+        if (!config.Settings.EnableRotationSolverCoordination)
+            return "coordination disabled";
+        if (!rotationSolver.Available)
+            return "RotationSolver unavailable";
+        if (!rotationSolver.NextActionEventsAvailable)
+            return "next action event unavailable";
+        if (cachedSafety.BossModNavigating || cachedSafety.BossModHasNaviTarget)
+            return "BossMod navigation active";
+        if (snapshot.TargetOmnidirectional == true)
+            return "target does not require positionals";
+        if (snapshot.TrueNorthAvailable)
+            return "True North available";
+        if (selected.Requirement is PositionalRequirement.Any or PositionalRequirement.None or PositionalRequirement.Unknown)
+            return "border hold only";
+        if (DateTime.UtcNow < nextNoCastingAllowed)
+            return "cooldown";
+
+        var next = rotationSolver.GetNextGcdActionInfo();
+        if (next.NextGcdActionId == 0)
+            return "next action unknown";
+        if (DateTime.UtcNow - next.NextGcdUpdatedAt > TimeSpan.FromMilliseconds(config.Settings.RsrNextActionMaxAgeMs))
+            return "next action stale";
+        if (next.NextGcdRequirement is not (PositionalRequirement.Rear or PositionalRequirement.Flank))
+            return "next action not positional";
+        if (next.NextGcdRequirement != selected.Requirement)
+            return $"next positional {next.NextGcdRequirement} does not match movement {selected.Requirement}";
+
+        var target = new TargetSnapshot(snapshot.TargetPosition, snapshot.TargetRotation, snapshot.TargetHitboxRadius);
+        if (PositionalGeometry.IsPositionInRequiredSlice(snapshot.PlayerPosition, target, next.NextGcdRequirement))
+            return "already in slice";
+
+        duration = Math.Clamp(config.Settings.NoCastingDurationSeconds, 0.1f, 2.0f);
+        return "triggered";
+    }
 
     private static bool HasPositionalToleranceBuffer(TargetSnapshot target, BorderDestination destination, float moveTolerance)
     {

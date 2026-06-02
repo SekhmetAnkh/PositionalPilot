@@ -33,6 +33,43 @@ public sealed class PositionalGeometryTests
     }
 
     [Fact]
+    public void PositionSliceDetectsRearAndFlank()
+    {
+        var target = new TargetSnapshot(Vector3.Zero, 0, 1);
+
+        Assert.True(PositionalGeometry.IsPositionInRequiredSlice(new Vector3(0, 0, -4), target, PositionalRequirement.Rear));
+        Assert.True(PositionalGeometry.IsPositionInRequiredSlice(new Vector3(4, 0, 0), target, PositionalRequirement.Flank));
+        Assert.False(PositionalGeometry.IsPositionInRequiredSlice(new Vector3(0, 0, 4), target, PositionalRequirement.Rear));
+    }
+
+    [Theory]
+    [InlineData(3554, PositionalRequirement.Flank)]
+    [InlineData(3556, PositionalRequirement.Rear)]
+    [InlineData(66, PositionalRequirement.Rear)]
+    [InlineData(56, PositionalRequirement.Flank)]
+    [InlineData(2255, PositionalRequirement.Rear)]
+    [InlineData(3563, PositionalRequirement.Flank)]
+    [InlineData(24382, PositionalRequirement.Flank)]
+    [InlineData(24383, PositionalRequirement.Rear)]
+    [InlineData(7481, PositionalRequirement.Rear)]
+    [InlineData(7482, PositionalRequirement.Flank)]
+    [InlineData(34610, PositionalRequirement.Flank)]
+    [InlineData(34612, PositionalRequirement.Rear)]
+    [InlineData(34621, PositionalRequirement.Flank)]
+    [InlineData(34622, PositionalRequirement.Rear)]
+    public void RotationSolverMeleePositionalMapCoversKnownActions(uint actionId, PositionalRequirement expected)
+    {
+        Assert.True(PositionalActionMap.TryGetRequirement(actionId, out var requirement));
+        Assert.Equal(expected, requirement);
+    }
+
+    [Fact]
+    public void RotationSolverMeleePositionalMapFailsClosedForUnknownActions()
+    {
+        Assert.False(PositionalActionMap.TryGetRequirement(999999, out _));
+    }
+
+    [Fact]
     public void BorderAnchorsAreRearFlankBorders()
     {
         var settings = new PositionalPilotSettings();

@@ -66,6 +66,19 @@ public static class PositionalGeometry
         out float deviation) =>
         AngleMatchesRequirement(worldAngle, targetRotation, requirement, 0, out deviation);
 
+    public static bool IsPositionInRequiredSlice(
+        Vector3 position,
+        TargetSnapshot target,
+        PositionalRequirement requirement,
+        float sectorMarginDegrees = 0)
+    {
+        if (requirement == PositionalRequirement.Any)
+            return true;
+
+        var angle = NormalizeAngle(MathF.Atan2(position.X - target.Position.X, position.Z - target.Position.Z));
+        return AngleMatchesRequirement(angle, target.RotationRadians, requirement, sectorMarginDegrees, out _);
+    }
+
     public static bool AngleMatchesRequirement(
         float worldAngle,
         float targetRotation,

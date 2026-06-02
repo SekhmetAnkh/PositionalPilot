@@ -17,6 +17,9 @@ public sealed class PositionalPilotSettings
     public float DestinationChangeThresholdYalms = 1.0f;
     public float StopWithinYalms = 0.35f;
     public bool EnableRotationSolverCoordination = false;
+    public int RsrNextActionMaxAgeMs = 1500;
+    public int NoCastingCooldownMs = 1500;
+    public float NoCastingDurationSeconds = 0.35f;
     public bool DisableDuringCasting = true;
     public bool DisableDuringManualMovement = true;
     public bool DisableDuringUpcomingDamage = true;
