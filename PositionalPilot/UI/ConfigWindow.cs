@@ -134,6 +134,7 @@ internal sealed class ConfigWindow
         ImGui.TextUnformatted($"Target hitbox: {s.TargetHitboxRadius:F2}");
         ImGui.TextUnformatted($"Recommended positional: {controller.CurrentPositional}");
         ImGui.TextUnformatted($"Movement positional: {controller.CurrentMovementPositional}");
+        ImGui.TextUnformatted($"Movement mode: {controller.CurrentMovementMode}");
         ImGui.TextUnformatted($"Movement source: {controller.CurrentMovementPositionalSource}");
         ImGui.TextUnformatted($"Border side: {controller.CurrentBorderSide}");
         ImGui.TextUnformatted($"Chosen destination: {controller.ChosenDestination?.ToString() ?? "none"}");
@@ -192,8 +193,9 @@ internal sealed class ConfigWindow
 
         ImGui.DragFloat("Max move distance", ref config.Settings.MaxMoveDistance, 0.1f, 0.5f, 20f);
         ImGui.DragFloat("Distance from hitbox", ref config.Settings.DesiredDistanceFromTargetHitbox, 0.1f, 0.1f, 10f);
-        ImGui.DragFloat("Positional nudge degrees", ref config.Settings.PositionalNudgeDegrees, 0.5f, 0f, 30f);
-        ImGui.DragFloat("Hold deadzone", ref config.Settings.HoldDeadzoneYalms, 0.05f, 0.05f, 5f);
+        ImGui.DragFloat("Committed positional angle", ref config.Settings.PositionalNudgeDegrees, 0.5f, 0f, 44f);
+        ImGui.DragFloat("Border hold deadzone", ref config.Settings.BorderHoldDeadzoneYalms, 0.05f, 0.05f, 5f);
+        ImGui.DragFloat("Positional deadzone", ref config.Settings.PositionalCommitDeadzoneYalms, 0.05f, 0.05f, 3f);
         ImGui.DragFloat("Destination change threshold", ref config.Settings.DestinationChangeThresholdYalms, 0.05f, 0.05f, 5f);
         ImGui.DragInt("Dependency refresh ms", ref config.Settings.DependencyRefreshMs, 50, 250, 10000);
         ImGui.DragInt("Safety refresh ms", ref config.Settings.SafetyRefreshMs, 25, 100, 5000);

@@ -13,7 +13,20 @@ public sealed class Configuration : IPluginConfiguration
     [NonSerialized]
     private IDalamudPluginInterface? pluginInterface;
 
-    public void Initialize(IDalamudPluginInterface pi) => pluginInterface = pi;
+    public void Initialize(IDalamudPluginInterface pi)
+    {
+        pluginInterface = pi;
+        if (Version < 2)
+        {
+            Settings.BorderHoldDeadzoneYalms = Settings.HoldDeadzoneYalms > 0 ? Settings.HoldDeadzoneYalms : 1.25f;
+            Settings.PositionalCommitDeadzoneYalms = Settings.StopWithinYalms > 0 ? Settings.StopWithinYalms : 0.35f;
+            if (Settings.PositionalNudgeDegrees <= 12.01f)
+                Settings.PositionalNudgeDegrees = 30.0f;
+
+            Version = 2;
+            Save();
+        }
+    }
 
     public void Save() => pluginInterface?.SavePluginConfig(this);
 }

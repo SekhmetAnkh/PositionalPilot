@@ -9,11 +9,13 @@ public sealed class PositionalPilotSettings
     public float MaxMoveDistance = 6.0f;
     public float DesiredDistanceFromTargetHitbox = 2.2f;
     public BorderSideMode BorderSideMode = BorderSideMode.Nearest;
-    public float PositionalNudgeDegrees = 12.0f;
+    public float PositionalNudgeDegrees = 30.0f;
     public int RepathCooldownMs = 500;
     public int DependencyRefreshMs = 2000;
     public int SafetyRefreshMs = 250;
     public float HoldDeadzoneYalms = 1.25f;
+    public float BorderHoldDeadzoneYalms = 1.25f;
+    public float PositionalCommitDeadzoneYalms = 0.35f;
     public float DestinationChangeThresholdYalms = 1.0f;
     public float StopWithinYalms = 0.35f;
     public bool EnableRotationSolverCoordination = false;

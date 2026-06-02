@@ -27,6 +27,8 @@ internal sealed class MovementController
     private Vector3? lastFailedPathDestination;
     private DateTime lastFailedPathTime = DateTime.MinValue;
     private DateTime nextNoCastingAllowed = DateTime.MinValue;
+    private PositionalRequirement lastMovementPositional = PositionalRequirement.Unknown;
+    private uint lastNextGcdActionId;
 
     public MovementController(Configuration config, GameStateReader game, BossModIpc bossMod, VnavmeshIpc vnavmesh, RotationSolverIpc rotationSolver, ThrottledLogger logger)
     {
@@ -48,6 +50,7 @@ internal sealed class MovementController
     public string LastNoCastingReason { get; private set; } = "not evaluated";
     public PositionalRequirement CurrentMovementPositional { get; private set; } = PositionalRequirement.Unknown;
     public string CurrentMovementPositionalSource { get; private set; } = "not evaluated";
+    public string CurrentMovementMode => PositionalMovementRules.MovementModeName(CurrentMovementPositional);
     public RotationSolverNextActionInfo LastRotationSolverNextAction => rotationSolver.GetNextGcdActionInfo();
     public GameSnapshot LastSnapshot { get; private set; } = new(false, default, 0, 0, false, false, false, false, 0, string.Empty, 0, 0, default, 0, 0, null, false, false, false);
 
@@ -114,7 +117,13 @@ internal sealed class MovementController
         }
 
         CurrentPositional = positional;
-        var movementPositional = ResolveMovementPositional(positional);
+        var nextAction = rotationSolver.GetNextGcdActionInfo();
+        var movementPositional = ResolveMovementPositional(positional, nextAction);
+        var bypassRepathCooldown = PositionalMovementRules.ShouldBypassRepathCooldown(
+            lastMovementPositional,
+            movementPositional,
+            lastNextGcdActionId,
+            nextAction.NextGcdActionId);
 
         if (config.Settings.MovementMode == MovementMode.SuggestOnly)
         {
@@ -123,8 +132,11 @@ internal sealed class MovementController
             return;
         }
 
-        if (DateTime.UtcNow < nextRepath)
+        if (!bypassRepathCooldown && DateTime.UtcNow < nextRepath)
+        {
+            BlockReason = "cooldown";
             return;
+        }
 
         var wasMoving = State == MovementState.Moving;
         var previousDestination = currentDestination?.Position;
@@ -134,6 +146,7 @@ internal sealed class MovementController
         {
             BlockReason = string.IsNullOrWhiteSpace(destinationFailureReason) ? "no safe destination" : destinationFailureReason;
             State = MovementState.Blocked;
+            RecordMovementCadence(movementPositional, nextAction);
             return;
         }
 
@@ -142,18 +155,23 @@ internal sealed class MovementController
         {
             BlockReason = reason;
             State = MovementState.Blocked;
+            RecordMovementCadence(movementPositional, nextAction);
             return;
         }
 
-        if (PositionalGeometry.DistanceXZ(LastSnapshot.PlayerPosition, selected.Position) <= config.Settings.HoldDeadzoneYalms)
+        var deadzone = GetMovementDeadzone(selected.Requirement);
+        if (PositionalGeometry.DistanceXZ(LastSnapshot.PlayerPosition, selected.Position) <= deadzone)
         {
             if (wasMoving && cachedSafety.VnavmeshNavigating)
-                Stop("hold deadzone reached");
+                Stop($"{CurrentMovementMode} deadzone reached");
             else
-                BlockReason = "within hold deadzone";
+                BlockReason = PositionalMovementRules.IsCommittedPositional(selected.Requirement)
+                    ? "already in committed slice"
+                    : "within border hold deadzone";
 
             State = MovementState.Idle;
             nextRepath = DateTime.UtcNow.AddMilliseconds(config.Settings.RepathCooldownMs);
+            RecordMovementCadence(movementPositional, nextAction);
             return;
         }
 
@@ -184,6 +202,7 @@ internal sealed class MovementController
         BlockReason = string.Empty;
         State = MovementState.Moving;
         nextRepath = DateTime.UtcNow.AddMilliseconds(config.Settings.RepathCooldownMs);
+        RecordMovementCadence(movementPositional, nextAction);
         logger.Debug(config, "movement-start", $"Moving to {selected.Position} for {movementPositional} ({CurrentMovementPositionalSource})");
     }
 
@@ -236,13 +255,12 @@ internal sealed class MovementController
                    !RecentlyFailedPath(sideDestination.Position);
         });
 
-        var navTolerance = GetVnavmeshTolerance();
         var destination = PositionalGeometry.CreateBorderDestination(snapshot.PlayerPosition, target, positional, selectedSide, config.Settings);
-        if (!HasPositionalToleranceBuffer(target, destination, navTolerance))
+        if (!IsDestinationInRequestedSlice(target, destination))
         {
-            destinationFailureReason = "border destination too close to positional edge";
+            destinationFailureReason = "destination is outside requested positional slice";
             currentDestination = null;
-            logger.Debug(config, "border-destination", $"{destinationFailureReason}; side={selectedSide}; positional={positional}; tolerance={navTolerance:F2}");
+            logger.Debug(config, "border-destination", $"{destinationFailureReason}; side={selectedSide}; positional={positional}");
             return null;
         }
 
@@ -322,12 +340,22 @@ internal sealed class MovementController
 
     private float GetVnavmeshTolerance() => MathF.Max(config.Settings.StopWithinYalms, 1.0f);
 
-    private PositionalRequirement ResolveMovementPositional(PositionalRequirement bossModPositional)
+    private float GetMovementDeadzone(PositionalRequirement requirement) =>
+        PositionalMovementRules.IsCommittedPositional(requirement)
+            ? MathF.Max(config.Settings.PositionalCommitDeadzoneYalms, config.Settings.StopWithinYalms)
+            : (config.Settings.BorderHoldDeadzoneYalms > 0 ? config.Settings.BorderHoldDeadzoneYalms : config.Settings.HoldDeadzoneYalms);
+
+    private void RecordMovementCadence(PositionalRequirement movementPositional, RotationSolverNextActionInfo nextAction)
+    {
+        lastMovementPositional = movementPositional;
+        lastNextGcdActionId = nextAction.NextGcdActionId;
+    }
+
+    private PositionalRequirement ResolveMovementPositional(PositionalRequirement bossModPositional, RotationSolverNextActionInfo next)
     {
         CurrentMovementPositional = bossModPositional;
         CurrentMovementPositionalSource = "BossMod";
 
-        var next = rotationSolver.GetNextGcdActionInfo();
         if (!next.EventsAvailable)
             return bossModPositional;
         if (DateTime.UtcNow - next.NextGcdUpdatedAt > TimeSpan.FromMilliseconds(config.Settings.RsrNextActionMaxAgeMs))
@@ -392,15 +420,12 @@ internal sealed class MovementController
         return "triggered";
     }
 
-    private static bool HasPositionalToleranceBuffer(TargetSnapshot target, BorderDestination destination, float moveTolerance)
+    private static bool IsDestinationInRequestedSlice(TargetSnapshot target, BorderDestination destination)
     {
         if (destination.Requirement == PositionalRequirement.Any)
             return true;
 
-        var radius = MathF.Max(0.1f, PositionalGeometry.DistanceXZ(target.Position, destination.Position));
-        var toleranceAngle = MathF.Asin(MathF.Min(1.0f, moveTolerance / radius));
-        var guardAngle = 2.0f * MathF.PI / 180.0f;
-        return destination.AngularDeviationRadians + toleranceAngle + guardAngle <= MathF.PI / 4f;
+        return PositionalGeometry.IsPositionInRequiredSlice(destination.Position, target, destination.Requirement);
     }
 
     private bool RecentlyFailedPath(Vector3 destination) =>

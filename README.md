@@ -1,6 +1,6 @@
 # PositionalPilot
 
-PositionalPilot is a Dalamud plugin scaffold for assistive melee positional movement in FFXIV. When explicitly enabled, it can suggest or request small movements around the rear/flank border of the current target.
+PositionalPilot is a Dalamud plugin scaffold for assistive melee positional movement in FFXIV. When explicitly enabled, it can suggest or request small movements around the rear/flank border of the current target, then commit deeper into Rear or Flank when a known positional is next.
 
 The plugin is off by default. It has no stealth, hiding, anti-detection, ban-evasion, or ToS-bypass behavior.
 
@@ -103,7 +103,9 @@ The repository manifest points to the latest GitHub release asset named `latest.
 ## Known Limitations
 
 - Movement is intentionally gated on BossMod positional and safety IPC by default.
-- Movement uses a single rear/flank border destination per update and does not probe multiple vnavmesh paths.
+- Movement uses a single destination per update and does not probe multiple vnavmesh paths.
+- `Any` uses loose rear/flank border holding; committed `Rear`/`Flank` movement uses a deeper default angle and tighter deadzone to avoid playing on the edge.
+- Fresh known RSR next-GCD positional changes can bypass the repath cooldown once, so it reacts faster without repeatedly querying vnavmesh.
 - Safety/dependency checks are cached briefly to avoid polling BossMod/vnavmesh every frame.
 - Targets whose `BNpcBase.IsOmnidirectional` flag is true are treated as not requiring positionals, so assist movement is blocked.
 - Fresh known RotationSolver next-GCD positionals can select the movement slice even when BossMod recommends `Any`, so PositionalPilot can pre-position instead of relying on True North.

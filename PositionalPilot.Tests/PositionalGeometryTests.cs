@@ -118,6 +118,45 @@ public sealed class PositionalGeometryTests
         Assert.True(flankDeviation < anyRearDeviation);
     }
 
+    [Fact]
+    public void CommittedPositionalAngleMovesDeeperThanOldNudge()
+    {
+        var oldSettings = new PositionalPilotSettings { PositionalNudgeDegrees = 12 };
+        var newSettings = new PositionalPilotSettings { PositionalNudgeDegrees = 30 };
+        var target = new TargetSnapshot(Vector3.Zero, 0, 1);
+
+        var oldRear = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Rear, BorderSide.Left, oldSettings);
+        var newRear = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Rear, BorderSide.Left, newSettings);
+        var oldFlank = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Flank, BorderSide.Left, oldSettings);
+        var newFlank = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Flank, BorderSide.Left, newSettings);
+
+        Assert.True(newRear.AngularDeviationRadians < oldRear.AngularDeviationRadians);
+        Assert.True(newFlank.AngularDeviationRadians < oldFlank.AngularDeviationRadians);
+        Assert.True(PositionalGeometry.IsPositionInRequiredSlice(newRear.Position, target, PositionalRequirement.Rear));
+        Assert.True(PositionalGeometry.IsPositionInRequiredSlice(newFlank.Position, target, PositionalRequirement.Flank));
+    }
+
+    [Fact]
+    public void BorderDeadzoneDoesNotApplyToCommittedPositionals()
+    {
+        var settings = new PositionalPilotSettings
+        {
+            BorderHoldDeadzoneYalms = 1.25f,
+            PositionalCommitDeadzoneYalms = 0.35f,
+        };
+
+        Assert.True(PositionalGeometry.DistanceXZ(Vector3.Zero, new Vector3(0.8f, 0, 0)) <= settings.BorderHoldDeadzoneYalms);
+        Assert.True(PositionalGeometry.DistanceXZ(Vector3.Zero, new Vector3(0.8f, 0, 0)) > settings.PositionalCommitDeadzoneYalms);
+    }
+
+    [Fact]
+    public void RsrNextGcdChangeBypassesCooldownForCommittedPositionals()
+    {
+        Assert.True(PositionalMovementRules.ShouldBypassRepathCooldown(PositionalRequirement.Any, PositionalRequirement.Rear, 0, 34622));
+        Assert.True(PositionalMovementRules.ShouldBypassRepathCooldown(PositionalRequirement.Rear, PositionalRequirement.Flank, 34622, 34621));
+        Assert.False(PositionalMovementRules.ShouldBypassRepathCooldown(PositionalRequirement.Any, PositionalRequirement.Any, 34622, 34621));
+    }
+
     private static float AngleOf(Vector3 point)
     {
         var angle = MathF.Atan2(point.X, point.Z);
