@@ -33,33 +33,57 @@ public sealed class PositionalGeometryTests
     }
 
     [Fact]
-    public void SectorMarginRejectsRearEdge()
+    public void BorderAnchorsAreRearFlankBorders()
     {
-        var accepted = PositionalGeometry.AngleMatchesRequirement(MathF.PI * 0.75f, 0, PositionalRequirement.Rear, 12, out _);
+        var settings = new PositionalPilotSettings();
+        var target = new TargetSnapshot(Vector3.Zero, 0, 1);
 
-        Assert.False(accepted);
+        var left = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Any, BorderSide.Left, settings);
+        var right = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Any, BorderSide.Right, settings);
+
+        Assert.True(left.Position.X > 0);
+        Assert.True(left.Position.Z < 0);
+        Assert.True(right.Position.X < 0);
+        Assert.True(right.Position.Z < 0);
+        Assert.True(PositionalGeometry.AngleMatchesRequirement(AngleOf(left.Position), 0, PositionalRequirement.Rear, out _));
+        Assert.True(PositionalGeometry.AngleMatchesRequirement(AngleOf(left.Position), 0, PositionalRequirement.Flank, out _));
     }
 
     [Fact]
-    public void CandidateGenerationRespectsMaxMoveDistance()
+    public void NearestSideSelectionKeepsCurrentSafeSide()
     {
-        var settings = new PositionalPilotSettings { CandidateCount = 24, MaxMoveDistance = 1 };
-        var target = new TargetSnapshot(new Vector3(0, 0, 0), 0, 1);
+        var settings = new PositionalPilotSettings();
+        var target = new TargetSnapshot(Vector3.Zero, 0, 1);
 
-        var candidates = PositionalGeometry.GenerateCandidates(new Vector3(20, 0, 20), target, PositionalRequirement.Rear, settings);
+        var side = PositionalGeometry.SelectBorderSide(new Vector3(5, 0, 0), target, settings, BorderSide.Right, _ => true);
 
-        Assert.Empty(candidates);
+        Assert.Equal(BorderSide.Right, side);
     }
 
     [Fact]
-    public void HysteresisKeepsCurrentWhenImprovementIsSmall()
+    public void AnyUsesBorderAndRearFlankNudgeDeeper()
     {
-        var settings = new PositionalPilotSettings { MinimumImprovementYalms = 0.75f };
-        var current = new Candidate(new Vector3(0, 0, 0), PositionalRequirement.Rear, 1, 0, 1.0f);
-        var best = new Candidate(new Vector3(1, 0, 0), PositionalRequirement.Rear, 1, 0, 0.5f);
+        var settings = new PositionalPilotSettings { PositionalNudgeDegrees = 12 };
+        var target = new TargetSnapshot(Vector3.Zero, 0, 1);
 
-        var selected = PositionalGeometry.ApplyHysteresis(current, new[] { best }, settings, _ => true);
+        var any = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Any, BorderSide.Left, settings);
+        var rear = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Rear, BorderSide.Left, settings);
+        var flank = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Flank, BorderSide.Left, settings);
 
-        Assert.Same(current, selected);
+        var anyAngle = AngleOf(any.Position);
+        var rearAngle = AngleOf(rear.Position);
+        var flankAngle = AngleOf(flank.Position);
+        PositionalGeometry.AngleMatchesRequirement(anyAngle, 0, PositionalRequirement.Rear, out var anyRearDeviation);
+        PositionalGeometry.AngleMatchesRequirement(rearAngle, 0, PositionalRequirement.Rear, out var rearDeviation);
+        PositionalGeometry.AngleMatchesRequirement(flankAngle, 0, PositionalRequirement.Flank, out var flankDeviation);
+
+        Assert.True(rearDeviation < anyRearDeviation);
+        Assert.True(flankDeviation < anyRearDeviation);
+    }
+
+    private static float AngleOf(Vector3 point)
+    {
+        var angle = MathF.Atan2(point.X, point.Z);
+        return angle < 0 ? angle + MathF.PI * 2f : angle;
     }
 }

@@ -52,6 +52,8 @@ internal sealed class SafetyGate
             return Block("encounter downtime active", out reason);
         if (bossMod.IsBossModNavigating())
             return Block("BossMod currently owns navigation", out reason);
+        if (bossMod.TryGetBossModNaviTarget(out _))
+            return Block("BossMod has navigation target", out reason);
         if (!snapshot.TargetAlive || !snapshot.TargetTargetable)
             return Block("target not alive/targetable", out reason);
         if (snapshot.TargetHitboxRadius <= 0)

@@ -18,8 +18,9 @@ internal sealed class MovementController
 
     private DateTime nextRepath = DateTime.MinValue;
     private ulong lastTargetId;
-    private Candidate? currentCandidate;
-    private string candidateFailureReason = string.Empty;
+    private BorderDestination? currentDestination;
+    private BorderSide selectedSide = BorderSide.None;
+    private string destinationFailureReason = string.Empty;
     private Vector3? lastFailedPathDestination;
     private DateTime lastFailedPathTime = DateTime.MinValue;
 
@@ -37,7 +38,8 @@ internal sealed class MovementController
     public MovementState State { get; private set; } = MovementState.Idle;
     public string BlockReason { get; private set; } = "not evaluated";
     public PositionalRequirement CurrentPositional { get; private set; } = PositionalRequirement.Unknown;
-    public Vector3? ChosenDestination => currentCandidate?.Position;
+    public BorderSide CurrentBorderSide => selectedSide;
+    public Vector3? ChosenDestination => currentDestination?.Position;
     public GameSnapshot LastSnapshot { get; private set; } = new(false, default, 0, 0, false, false, false, false, 0, string.Empty, default, 0, 0, false, false);
 
     public void Update()
@@ -51,7 +53,8 @@ internal sealed class MovementController
         if (LastSnapshot.HasTarget && lastTargetId != 0 && LastSnapshot.TargetId != lastTargetId)
         {
             Stop("target changed");
-            currentCandidate = null;
+            currentDestination = null;
+            selectedSide = BorderSide.None;
         }
 
         if (LastSnapshot.HasTarget)
@@ -88,7 +91,7 @@ internal sealed class MovementController
 
         if (config.Settings.MovementMode == MovementMode.SuggestOnly)
         {
-            EvaluateCandidate(LastSnapshot, positional);
+            EvaluateDestination(LastSnapshot, positional);
             State = MovementState.Idle;
             return;
         }
@@ -97,10 +100,10 @@ internal sealed class MovementController
             return;
 
         State = MovementState.Evaluating;
-        var selected = EvaluateCandidate(LastSnapshot, positional);
+        var selected = EvaluateDestination(LastSnapshot, positional);
         if (selected == null)
         {
-            BlockReason = string.IsNullOrWhiteSpace(candidateFailureReason) ? "no safe candidate" : candidateFailureReason;
+            BlockReason = string.IsNullOrWhiteSpace(destinationFailureReason) ? "no safe destination" : destinationFailureReason;
             State = MovementState.Blocked;
             return;
         }
@@ -125,7 +128,7 @@ internal sealed class MovementController
             Stop($"vnavmesh path request failed: {vnavmesh.LastError ?? "IPC call failed"}");
             lastFailedPathDestination = selected.Position;
             lastFailedPathTime = DateTime.UtcNow;
-            currentCandidate = null;
+            currentDestination = null;
 
             EnterCooldown(2000);
             return;
@@ -169,56 +172,61 @@ internal sealed class MovementController
         logger.Debug(config, $"stop:{reason}", $"Movement stopped: {reason}");
     }
 
-    private Candidate? EvaluateCandidate(GameSnapshot snapshot, PositionalRequirement positional)
+    private BorderDestination? EvaluateDestination(GameSnapshot snapshot, PositionalRequirement positional)
     {
-        candidateFailureReason = string.Empty;
+        destinationFailureReason = string.Empty;
         var target = new TargetSnapshot(snapshot.TargetPosition, snapshot.TargetRotation, snapshot.TargetHitboxRadius);
-        var candidates = PositionalGeometry.GenerateCandidates(snapshot.PlayerPosition, target, positional, config.Settings)
-            .Where(c => bossMod.IsPositionSafe(c.Position) && bossMod.IsDashSafe(snapshot.PlayerPosition, c.Position))
-            .OrderBy(c => c.Score)
-            .ToArray();
 
-        if (candidates.Length == 0)
+        selectedSide = PositionalGeometry.SelectBorderSide(snapshot.PlayerPosition, target, config.Settings, selectedSide, side =>
         {
-            candidateFailureReason = "no BossMod-safe positional candidates";
-            currentCandidate = null;
-            logger.Debug(config, "candidate-count", "Candidates after BossMod safety filter: 0");
-            return null;
-        }
+            var sideDestination = PositionalGeometry.CreateBorderDestination(snapshot.PlayerPosition, target, PositionalRequirement.Any, side, config.Settings);
+            return bossMod.IsPositionSafe(sideDestination.Position) &&
+                   bossMod.IsDashSafe(snapshot.PlayerPosition, sideDestination.Position) &&
+                   !RecentlyFailedPath(sideDestination.Position);
+        });
 
         var navTolerance = GetVnavmeshTolerance();
-        var pathable = candidates
-            .Where(c => HasPositionalToleranceBuffer(target, c, navTolerance))
-            .Where(c => !RecentlyFailedPath(c.Position))
-            .ToArray();
-
-        if (pathable.Length == 0)
+        var destination = PositionalGeometry.CreateBorderDestination(snapshot.PlayerPosition, target, positional, selectedSide, config.Settings);
+        if (!HasPositionalToleranceBuffer(target, destination, navTolerance))
         {
-            candidateFailureReason = $"no buffered candidate available from {candidates.Length} safe candidate(s)";
-            currentCandidate = null;
-            logger.Debug(config, "candidate-count", $"BossMod-safe candidates: {candidates.Length}; buffered candidates: 0; tolerance={navTolerance:F2}");
+            destinationFailureReason = "border destination too close to positional edge";
+            currentDestination = null;
+            logger.Debug(config, "border-destination", $"{destinationFailureReason}; side={selectedSide}; positional={positional}; tolerance={navTolerance:F2}");
             return null;
         }
 
-        currentCandidate = PositionalGeometry.ApplyHysteresis(currentCandidate, pathable, config.Settings, c =>
-            bossMod.IsPositionSafe(c.Position) &&
-            HasPositionalToleranceBuffer(target, c, navTolerance) &&
-            !RecentlyFailedPath(c.Position));
-        logger.Debug(config, "candidate-count", $"BossMod-safe candidates: {candidates.Length}; buffered candidates: {pathable.Length}; selected: {currentCandidate?.Position.ToString() ?? "none"}");
-        return currentCandidate;
+        if (RecentlyFailedPath(destination.Position))
+        {
+            destinationFailureReason = "recent vnavmesh failure for border destination";
+            currentDestination = null;
+            logger.Debug(config, "border-destination", $"{destinationFailureReason}; side={selectedSide}; positional={positional}");
+            return null;
+        }
+
+        if (!bossMod.IsPositionSafe(destination.Position) || !bossMod.IsDashSafe(snapshot.PlayerPosition, destination.Position))
+        {
+            destinationFailureReason = "BossMod reports border destination unsafe";
+            currentDestination = null;
+            logger.Debug(config, "border-destination", $"{destinationFailureReason}; side={selectedSide}; positional={positional}; destination={destination.Position}");
+            return null;
+        }
+
+        currentDestination = destination;
+        logger.Debug(config, "border-destination", $"Selected {destination.Position} on {selectedSide} border for {positional}");
+        return currentDestination;
     }
 
     private float GetVnavmeshTolerance() => MathF.Max(config.Settings.StopWithinYalms, 1.0f);
 
-    private static bool HasPositionalToleranceBuffer(TargetSnapshot target, Candidate candidate, float moveTolerance)
+    private static bool HasPositionalToleranceBuffer(TargetSnapshot target, BorderDestination destination, float moveTolerance)
     {
-        if (candidate.Requirement == PositionalRequirement.Any)
+        if (destination.Requirement == PositionalRequirement.Any)
             return true;
 
-        var radius = MathF.Max(0.1f, PositionalGeometry.DistanceXZ(target.Position, candidate.Position));
+        var radius = MathF.Max(0.1f, PositionalGeometry.DistanceXZ(target.Position, destination.Position));
         var toleranceAngle = MathF.Asin(MathF.Min(1.0f, moveTolerance / radius));
         var guardAngle = 2.0f * MathF.PI / 180.0f;
-        return candidate.AngularDeviationRadians + toleranceAngle + guardAngle <= MathF.PI / 4f;
+        return destination.AngularDeviationRadians + toleranceAngle + guardAngle <= MathF.PI / 4f;
     }
 
     private bool RecentlyFailedPath(Vector3 destination) =>

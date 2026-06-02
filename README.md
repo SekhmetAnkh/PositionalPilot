@@ -1,6 +1,6 @@
 # PositionalPilot
 
-PositionalPilot is a Dalamud plugin scaffold for assistive melee positional movement in FFXIV. When explicitly enabled, it can suggest or request movement toward a safe rear/flank location around the current target.
+PositionalPilot is a Dalamud plugin scaffold for assistive melee positional movement in FFXIV. When explicitly enabled, it can suggest or request small movements around the rear/flank border of the current target.
 
 The plugin is off by default. It has no stealth, hiding, anti-detection, ban-evasion, or ToS-bypass behavior.
 
@@ -38,8 +38,8 @@ vnavmesh:
 - `vnavmesh.Path.MoveTo` -> `List<Vector3> waypoints, bool fly`
 - `vnavmesh.Path.Stop`
 - `vnavmesh.Path.IsRunning` -> `bool`
-- `vnavmesh.SimpleMove.PathfindAndMoveTo` -> `Vector3 dest, bool fly => Task<bool>`
-- `vnavmesh.SimpleMove.PathfindAndMoveCloseTo` -> `Vector3 dest, bool fly, float range => Task<bool>`
+- `vnavmesh.SimpleMove.PathfindAndMoveTo` -> `Vector3 dest, bool fly => bool`
+- `vnavmesh.SimpleMove.PathfindAndMoveCloseTo` -> `Vector3 dest, bool fly, float range => bool`
 
 RotationSolverReborn:
 
@@ -63,7 +63,7 @@ No useful rear/flank/range IPC was found.
 - `/ppilot off`: disable and stop movement.
 - `/ppilot stop`: emergency stop, disables plugin and stops vnavmesh.
 - `/ppilot suggest`: toggle SuggestOnly mode.
-- `/ppilot status`: print dependency, target, candidate, and block status.
+- `/ppilot status`: print dependency, target, border side, destination, and block status.
 - `/ppilot debug`: toggle throttled debug logging.
 
 ## Safety Philosophy
@@ -72,7 +72,7 @@ PositionalPilot prefers doing nothing over unsafe movement. Assist movement requ
 
 ## Build
 
-Open `PositionalPilot.sln` with a Dalamud API 15 development environment. The pure geometry tests target `net6.0`; the plugin project targets `net9.0-windows` and expects Dalamud dev assemblies under `%APPDATA%\XIVLauncher\addon\Hooks\dev\`.
+Open `PositionalPilot.sln` with a Dalamud API 15 development environment. The pure geometry tests target `net6.0`; the plugin project targets `net10.0-windows` and expects Dalamud dev assemblies under `%APPDATA%\XIVLauncher\addon\Hooks\dev\`.
 
 ## Dalamud Custom Repository
 
@@ -99,6 +99,7 @@ The repository manifest points to the latest GitHub release asset named `latest.
 ## Known Limitations
 
 - Movement is intentionally gated on BossMod positional and safety IPC by default.
+- Movement uses a single rear/flank border destination per update and does not probe multiple vnavmesh paths.
 - Avarice is not required because it does not expose the needed rear/flank/range IPC.
 - RotationSolverReborn is used for `NoCasting` coordination only; no next-positional query IPC was found.
 - The overlay is a simple text overlay, not a world-space marker.

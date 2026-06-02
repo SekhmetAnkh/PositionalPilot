@@ -62,7 +62,7 @@ internal sealed class ConfigWindow
         ImGui.SetNextWindowPos(new System.Numerics.Vector2(24, 260), ImGuiCond.FirstUseEver);
         ImGui.Begin("PositionalPilot Overlay", ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoSavedSettings);
         ImGui.TextUnformatted($"Positional: {controller.CurrentPositional}");
-        ImGui.TextUnformatted(controller.ChosenDestination.HasValue ? "Safe candidate ready" : "No safe candidate");
+        ImGui.TextUnformatted(controller.ChosenDestination.HasValue ? "Safe destination ready" : "No safe destination");
         if (!string.IsNullOrWhiteSpace(controller.BlockReason))
             ImGui.TextUnformatted(controller.BlockReason);
         ImGui.End();
@@ -125,6 +125,7 @@ internal sealed class ConfigWindow
         ImGui.TextUnformatted($"Target: {(s.HasTarget ? s.TargetName : "none")}");
         ImGui.TextUnformatted($"Target hitbox: {s.TargetHitboxRadius:F2}");
         ImGui.TextUnformatted($"Recommended positional: {controller.CurrentPositional}");
+        ImGui.TextUnformatted($"Border side: {controller.CurrentBorderSide}");
         ImGui.TextUnformatted($"Chosen destination: {controller.ChosenDestination?.ToString() ?? "none"}");
         ImGui.TextUnformatted($"Movement state: {controller.State}");
         ImGui.TextUnformatted($"Block reason: {controller.BlockReason}");
@@ -155,13 +156,17 @@ internal sealed class ConfigWindow
     private void DrawTuning()
     {
         ImGui.TextUnformatted("Movement tuning");
+        var sideMode = (int)config.Settings.BorderSideMode;
+        if (ImGui.Combo("Border side", ref sideMode, "Nearest\0Left\0Right\0"))
+        {
+            config.Settings.BorderSideMode = (BorderSideMode)sideMode;
+            config.Save();
+        }
+
         ImGui.DragFloat("Max move distance", ref config.Settings.MaxMoveDistance, 0.1f, 0.5f, 20f);
         ImGui.DragFloat("Distance from hitbox", ref config.Settings.DesiredDistanceFromTargetHitbox, 0.1f, 0.1f, 10f);
-        ImGui.DragFloat("Candidate ring extra", ref config.Settings.CandidateRingExtraDistance, 0.1f, 0f, 10f);
-        ImGui.DragFloat("Sector margin degrees", ref config.Settings.PositionalSectorMarginDegrees, 0.5f, 0f, 30f);
-        ImGui.DragInt("Candidate count", ref config.Settings.CandidateCount, 1, 8, 96);
+        ImGui.DragFloat("Positional nudge degrees", ref config.Settings.PositionalNudgeDegrees, 0.5f, 0f, 30f);
         ImGui.DragInt("Repath cooldown ms", ref config.Settings.RepathCooldownMs, 10, 100, 5000);
-        ImGui.DragFloat("Minimum improvement", ref config.Settings.MinimumImprovementYalms, 0.05f, 0f, 5f);
         ImGui.DragFloat("Stop within yalms", ref config.Settings.StopWithinYalms, 0.05f, 0.05f, 3f);
         if (ImGui.IsItemDeactivatedAfterEdit())
             config.Save();

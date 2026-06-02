@@ -8,11 +8,9 @@ public sealed class PositionalPilotSettings
         RequiredDependencies.RequireBossModSafety | RequiredDependencies.RequireVnavmesh;
     public float MaxMoveDistance = 6.0f;
     public float DesiredDistanceFromTargetHitbox = 2.2f;
-    public float CandidateRingExtraDistance = 1.5f;
-    public float PositionalSectorMarginDegrees = 12.0f;
-    public int CandidateCount = 24;
+    public BorderSideMode BorderSideMode = BorderSideMode.Nearest;
+    public float PositionalNudgeDegrees = 12.0f;
     public int RepathCooldownMs = 500;
-    public float MinimumImprovementYalms = 0.75f;
     public float StopWithinYalms = 0.35f;
     public bool DisableDuringCasting = true;
     public bool DisableDuringManualMovement = true;

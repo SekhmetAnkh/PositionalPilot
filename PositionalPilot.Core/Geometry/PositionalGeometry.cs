@@ -6,35 +6,58 @@ namespace PositionalPilot.Core.Geometry;
 public static class PositionalGeometry
 {
     private const float TwoPi = MathF.PI * 2f;
+    private const float RearFlankBorderOffset = MathF.PI * 3f / 4f;
 
-    public static IReadOnlyList<Candidate> GenerateCandidates(
+    public static BorderDestination CreateBorderDestination(
         Vector3 playerPosition,
         TargetSnapshot target,
         PositionalRequirement requirement,
+        BorderSide side,
         PositionalPilotSettings settings)
     {
-        if (target.HitboxRadius <= 0 || settings.CandidateCount < 4)
-            return Array.Empty<Candidate>();
+        var angle = GetBorderAngle(target.RotationRadians, side);
+        if (requirement is PositionalRequirement.Rear or PositionalRequirement.Flank)
+            angle = NudgeBorderAngle(angle, side, requirement, DegreesToRadians(settings.PositionalNudgeDegrees));
 
-        var result = new List<Candidate>(settings.CandidateCount);
         var radius = target.HitboxRadius + settings.DesiredDistanceFromTargetHitbox;
-        for (var i = 0; i < settings.CandidateCount; i++)
-        {
-            var angle = i * TwoPi / settings.CandidateCount;
-            if (!AngleMatchesRequirement(angle, target.RotationRadians, requirement, settings.PositionalSectorMarginDegrees, out var deviation))
-                continue;
-
-            var point = target.Position + new Vector3(MathF.Sin(angle) * radius, 0, MathF.Cos(angle) * radius);
-            var distance = DistanceXZ(playerPosition, point);
-            if (distance > settings.MaxMoveDistance)
-                continue;
-
-            var score = distance + deviation * 1.5f;
-            result.Add(new Candidate(point, requirement, distance, deviation, score));
-        }
-
-        return result.OrderBy(c => c.Score).ToArray();
+        var point = target.Position + PointOnRing(angle, radius);
+        var distance = DistanceXZ(playerPosition, point);
+        var deviation = GetRequirementDeviation(angle, target.RotationRadians, requirement);
+        var score = distance + deviation * 1.5f;
+        return new BorderDestination(point, side, requirement, distance, deviation, score);
     }
+
+    public static BorderSide SelectBorderSide(
+        Vector3 playerPosition,
+        TargetSnapshot target,
+        PositionalPilotSettings settings,
+        BorderSide currentSide,
+        Func<BorderSide, bool> sideStillSafe)
+    {
+        if (settings.BorderSideMode == BorderSideMode.Left)
+            return sideStillSafe(BorderSide.Left) || !sideStillSafe(BorderSide.Right) ? BorderSide.Left : BorderSide.Right;
+        if (settings.BorderSideMode == BorderSideMode.Right)
+            return sideStillSafe(BorderSide.Right) || !sideStillSafe(BorderSide.Left) ? BorderSide.Right : BorderSide.Left;
+
+        if (currentSide != BorderSide.None && sideStillSafe(currentSide))
+            return currentSide;
+
+        var left = CreateBorderDestination(playerPosition, target, PositionalRequirement.Any, BorderSide.Left, settings);
+        var right = CreateBorderDestination(playerPosition, target, PositionalRequirement.Any, BorderSide.Right, settings);
+        var leftSafe = sideStillSafe(BorderSide.Left);
+        var rightSafe = sideStillSafe(BorderSide.Right);
+        if (leftSafe && !rightSafe)
+            return BorderSide.Left;
+        if (rightSafe && !leftSafe)
+            return BorderSide.Right;
+
+        return left.DistanceFromPlayer <= right.DistanceFromPlayer ? BorderSide.Left : BorderSide.Right;
+    }
+
+    public static float GetBorderAngle(float targetRotation, BorderSide side) =>
+        side == BorderSide.Left
+            ? NormalizeAngle(targetRotation + RearFlankBorderOffset)
+            : NormalizeAngle(targetRotation - RearFlankBorderOffset);
 
     public static bool AngleMatchesRequirement(
         float worldAngle,
@@ -87,24 +110,32 @@ public static class PositionalGeometry
         };
     }
 
-    public static Candidate? ApplyHysteresis(Candidate? current, IReadOnlyList<Candidate> ranked, PositionalPilotSettings settings, Func<Candidate, bool> stillSafe)
-    {
-        if (ranked.Count == 0)
-            return current != null && stillSafe(current) ? current : null;
-
-        var best = ranked[0];
-        if (current == null || !stillSafe(current))
-            return best;
-
-        return current.Score - best.Score >= settings.MinimumImprovementYalms ? best : current;
-    }
-
     public static float DistanceXZ(Vector3 a, Vector3 b)
     {
         var dx = a.X - b.X;
         var dz = a.Z - b.Z;
         return MathF.Sqrt(dx * dx + dz * dz);
     }
+
+    private static float NudgeBorderAngle(float borderAngle, BorderSide side, PositionalRequirement requirement, float nudgeRadians)
+    {
+        if (side == BorderSide.Left)
+            return NormalizeAngle(borderAngle + (requirement == PositionalRequirement.Rear ? nudgeRadians : -nudgeRadians));
+
+        return NormalizeAngle(borderAngle + (requirement == PositionalRequirement.Rear ? -nudgeRadians : nudgeRadians));
+    }
+
+    private static float GetRequirementDeviation(float angle, float targetRotation, PositionalRequirement requirement)
+    {
+        if (requirement == PositionalRequirement.Any)
+            return 0;
+
+        AngleMatchesRequirement(angle, targetRotation, requirement, out var deviation);
+        return deviation;
+    }
+
+    private static Vector3 PointOnRing(float angle, float radius) =>
+        new(MathF.Sin(angle) * radius, 0, MathF.Cos(angle) * radius);
 
     private static float AbsAngleDelta(float a, float b)
     {

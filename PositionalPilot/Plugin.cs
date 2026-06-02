@@ -131,6 +131,6 @@ public sealed class Plugin : IDalamudPlugin
         var snap = movement.LastSnapshot;
         services.Chat.Print($"PositionalPilot: enabled={config.Settings.Enabled}, mode={config.Settings.MovementMode}, state={movement.State}");
         services.Chat.Print($"Deps: BossMod={bossMod.Available} ({bossMod.LastError ?? "ok"}), RSR={rotationSolver.Available} ({rotationSolver.LastError ?? "ok"}), vnavmesh={vnavmesh.Available} ({vnavmesh.LastError ?? "ok"}), Avarice={avarice.Available} ({avarice.LastError ?? "optional"})");
-        services.Chat.Print($"Target: {(snap.HasTarget ? snap.TargetName : "none")}, positional={movement.CurrentPositional}, destination={movement.ChosenDestination?.ToString() ?? "none"}, block={movement.BlockReason}");
+        services.Chat.Print($"Target: {(snap.HasTarget ? snap.TargetName : "none")}, positional={movement.CurrentPositional}, border={movement.CurrentBorderSide}, destination={movement.ChosenDestination?.ToString() ?? "none"}, block={movement.BlockReason}");
     }
 }
