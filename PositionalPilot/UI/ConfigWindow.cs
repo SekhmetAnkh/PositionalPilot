@@ -166,8 +166,10 @@ internal sealed class ConfigWindow
         ImGui.DragFloat("Max move distance", ref config.Settings.MaxMoveDistance, 0.1f, 0.5f, 20f);
         ImGui.DragFloat("Distance from hitbox", ref config.Settings.DesiredDistanceFromTargetHitbox, 0.1f, 0.1f, 10f);
         ImGui.DragFloat("Positional nudge degrees", ref config.Settings.PositionalNudgeDegrees, 0.5f, 0f, 30f);
+        ImGui.DragFloat("Retarget threshold", ref config.Settings.RetargetThresholdYalms, 0.05f, 0.05f, 3f);
         ImGui.DragInt("Repath cooldown ms", ref config.Settings.RepathCooldownMs, 10, 100, 5000);
         ImGui.DragFloat("Stop within yalms", ref config.Settings.StopWithinYalms, 0.05f, 0.05f, 3f);
+        CheckboxSetting("Coordinate with RotationSolver", v => config.Settings.EnableRotationSolverCoordination = v, config.Settings.EnableRotationSolverCoordination);
         if (ImGui.IsItemDeactivatedAfterEdit())
             config.Save();
     }

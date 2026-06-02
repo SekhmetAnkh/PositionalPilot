@@ -11,7 +11,9 @@ public sealed class PositionalPilotSettings
     public BorderSideMode BorderSideMode = BorderSideMode.Nearest;
     public float PositionalNudgeDegrees = 12.0f;
     public int RepathCooldownMs = 500;
+    public float RetargetThresholdYalms = 0.75f;
     public float StopWithinYalms = 0.35f;
+    public bool EnableRotationSolverCoordination = false;
     public bool DisableDuringCasting = true;
     public bool DisableDuringManualMovement = true;
     public bool DisableDuringUpcomingDamage = true;

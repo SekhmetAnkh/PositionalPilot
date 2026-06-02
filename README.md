@@ -100,6 +100,7 @@ The repository manifest points to the latest GitHub release asset named `latest.
 
 - Movement is intentionally gated on BossMod positional and safety IPC by default.
 - Movement uses a single rear/flank border destination per update and does not probe multiple vnavmesh paths.
+- RotationSolver coordination is off by default; enabling it may briefly request NoCasting during movement.
 - Avarice is not required because it does not expose the needed rear/flank/range IPC.
 - RotationSolverReborn is used for `NoCasting` coordination only; no next-positional query IPC was found.
 - The overlay is a simple text overlay, not a world-space marker.

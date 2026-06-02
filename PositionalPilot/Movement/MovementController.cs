@@ -60,7 +60,10 @@ internal sealed class MovementController
         if (LastSnapshot.HasTarget)
             lastTargetId = LastSnapshot.TargetId;
 
-        if (config.Settings.DisableDuringManualMovement && State == MovementState.Moving && LastSnapshot.IsManuallyMoving)
+        if (config.Settings.DisableDuringManualMovement &&
+            State == MovementState.Moving &&
+            LastSnapshot.IsManuallyMoving &&
+            !vnavmesh.IsNavigating())
         {
             Stop("manual movement detected");
             EnterCooldown();
@@ -99,6 +102,8 @@ internal sealed class MovementController
         if (DateTime.UtcNow < nextRepath)
             return;
 
+        var wasMoving = State == MovementState.Moving;
+        var previousDestination = currentDestination?.Position;
         State = MovementState.Evaluating;
         var selected = EvaluateDestination(LastSnapshot, positional);
         if (selected == null)
@@ -122,6 +127,17 @@ internal sealed class MovementController
             return;
         }
 
+        if (wasMoving &&
+            vnavmesh.IsNavigating() &&
+            previousDestination.HasValue &&
+            PositionalGeometry.DistanceXZ(previousDestination.Value, selected.Position) < config.Settings.RetargetThresholdYalms)
+        {
+            BlockReason = string.Empty;
+            nextRepath = DateTime.UtcNow.AddMilliseconds(config.Settings.RepathCooldownMs);
+            logger.Debug(config, "movement-continue", $"Continuing toward {previousDestination.Value}; new destination delta below retarget threshold");
+            return;
+        }
+
         var navTolerance = GetVnavmeshTolerance();
         if (!vnavmesh.PathfindAndMoveCloseTo(selected.Position, navTolerance))
         {
@@ -134,7 +150,8 @@ internal sealed class MovementController
             return;
         }
 
-        rotationSolver.PauseOrNoCasting(MathF.Max(0.25f, config.Settings.RepathCooldownMs / 1000f));
+        if (config.Settings.EnableRotationSolverCoordination)
+            rotationSolver.PauseOrNoCasting(MathF.Max(0.25f, config.Settings.RepathCooldownMs / 1000f));
         BlockReason = string.Empty;
         State = MovementState.Moving;
         nextRepath = DateTime.UtcNow.AddMilliseconds(config.Settings.RepathCooldownMs);
@@ -167,7 +184,8 @@ internal sealed class MovementController
     public void Stop(string reason)
     {
         vnavmesh.Stop();
-        rotationSolver.UnpauseOrEndSpecial();
+        if (config.Settings.EnableRotationSolverCoordination)
+            rotationSolver.UnpauseOrEndSpecial();
         BlockReason = reason;
         logger.Debug(config, $"stop:{reason}", $"Movement stopped: {reason}");
     }
