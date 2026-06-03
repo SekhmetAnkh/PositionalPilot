@@ -24,4 +24,5 @@ public static class PositionalMovementRules
 
         return currentNextGcdActionId != 0 && currentNextGcdActionId != previousNextGcdActionId;
     }
+
 }

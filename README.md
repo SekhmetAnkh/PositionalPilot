@@ -104,7 +104,7 @@ The repository manifest points to the latest GitHub release asset named `latest.
 
 - Movement is intentionally gated on BossMod positional and safety IPC by default.
 - Movement uses a single destination per update and does not probe multiple vnavmesh paths.
-- `Any` uses loose rear/flank border holding; committed `Rear`/`Flank` movement uses a deeper default angle and tighter deadzone to avoid playing on the edge.
+- `Any` uses loose rear/flank border holding only: the neutral anchors are behind the target between rear and flank, never front/flank.
 - Fresh known RSR next-GCD positional changes can bypass the repath cooldown once, so it reacts faster without repeatedly querying vnavmesh.
 - BossMod `Front` recommendations are never converted into ppilot movement destinations. They block ppilot movement and show as `front blocked`.
 - Safety/dependency checks are cached briefly to avoid polling BossMod/vnavmesh every frame.

@@ -167,6 +167,23 @@ public sealed class PositionalGeometryTests
         Assert.False(PositionalMovementRules.ShouldBypassRepathCooldown(PositionalRequirement.Any, PositionalRequirement.Any, 34622, 34621));
     }
 
+    [Fact]
+    public void AnyBorderHoldRemainsRearFlankOnly()
+    {
+        var settings = new PositionalPilotSettings();
+        var target = new TargetSnapshot(Vector3.Zero, 0, 1);
+
+        var left = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Any, BorderSide.Left, settings);
+        var right = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Any, BorderSide.Right, settings);
+
+        Assert.True(left.Position.Z < 0);
+        Assert.True(right.Position.Z < 0);
+        Assert.True(left.Position.X > 0);
+        Assert.True(right.Position.X < 0);
+        Assert.False(PositionalGeometry.IsPositionInRequiredSlice(left.Position, target, PositionalRequirement.Front));
+        Assert.False(PositionalGeometry.IsPositionInRequiredSlice(right.Position, target, PositionalRequirement.Front));
+    }
+
     private static float AngleOf(Vector3 point)
     {
         var angle = MathF.Atan2(point.X, point.Z);
