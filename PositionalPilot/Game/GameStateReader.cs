@@ -154,7 +154,7 @@ internal sealed unsafe class GameStateReader
         }
     }
 
-    private bool IsTargetTargetingPlayer(IBattleChara target, ulong playerObjectId)
+    private bool? IsTargetTargetingPlayer(IBattleChara target, ulong playerObjectId)
     {
         try
         {
@@ -163,7 +163,7 @@ internal sealed unsafe class GameStateReader
         catch (Exception ex)
         {
             services.Log.Debug(ex, "Failed to read target-of-target for {TargetName}", target.Name.ToString());
-            return true;
+            return null;
         }
     }
 

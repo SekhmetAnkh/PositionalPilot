@@ -108,8 +108,7 @@ internal sealed class MovementController
         CurrentPositional = cachedSafety.Positional;
         var nextAction = rotationSolver.GetNextGcdActionInfo();
         var movementPositional = ResolveMovementPositional(nextAction);
-        var targetTrackingPlayer = LastSnapshot.TargetTargetsPlayer && LastSnapshot.TargetIsRotating;
-        var frontEscape = IsPlayerCurrentlyInFront(LastSnapshot) && !targetTrackingPlayer;
+        var frontEscape = IsPlayerCurrentlyInFront(LastSnapshot) && LastSnapshot.TargetTargetsPlayer != true;
         if (frontEscape && !PositionalMovementRules.IsCommittedPositional(movementPositional))
             CurrentMovementPositionalSource = "front escape to rear/flank border";
 
@@ -299,8 +298,8 @@ internal sealed class MovementController
             return Block($"not a melee job (job {snapshot.JobId})", out reason);
         if (snapshot.TargetOmnidirectional == true)
             return Block("target does not require positionals", out reason);
-        if (snapshot.TargetTargetsPlayer && snapshot.TargetIsRotating)
-            return Block("target is tracking player", out reason);
+        if (snapshot.TargetTargetsPlayer == true)
+            return Block("target is targeting player", out reason);
 
         reason = string.Empty;
         return false;
