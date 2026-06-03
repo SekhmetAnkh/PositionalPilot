@@ -108,11 +108,11 @@ The repository manifest points to the latest GitHub release asset named `latest.
 - Fresh known RSR next-GCD or next-action positional changes can bypass the repath cooldown once, so it reacts faster without repeatedly querying vnavmesh.
 - BossMod recommended positionals are not converted into ppilot movement destinations. If RSR does not provide a fresh known Rear/Flank action, ppilot holds the nearest rear/flank border.
 - If the player is currently in the target's front slice, ppilot treats that as an escape signal and bypasses normal repath cooldown to move toward an intended rear/flank border when BossMod safety allows it.
-- If the current target is targeting the player, ppilot blocks assist movement to avoid orbiting or spinning around a target that is actively tracking the player.
+- If the current target is targeting the player and actively rotating, ppilot blocks assist movement to avoid orbiting or spinning around a target that is tracking the player. Stationary target-of-target cases can still front-escape when BossMod safety allows it.
 - Safety/dependency checks are cached briefly to avoid polling BossMod/vnavmesh every frame.
 - Targets whose `BNpcBase.IsOmnidirectional` flag is true are treated as not requiring positionals, so assist movement is blocked.
 - Fresh known RotationSolver next-GCD or next-action positionals select the movement slice, so PositionalPilot can pre-position instead of relying on True North.
-- RotationSolver NoCasting coordination is off by default; enabling it may briefly request NoCasting only when the next cached RSR GCD is a known Rear/Flank positional, the player is not already in that slice, and True North is not available.
+- RotationSolver NoCasting coordination is off by default; enabling it may briefly request NoCasting when the resolved RSR next GCD or next-action positional is Rear/Flank, the player is not already in that slice, and True North is not available. This can happen before issuing movement or after a distance/safety block so RSR has time to let movement happen.
 - Avarice is not required because it does not expose the needed rear/flank/range IPC.
 - RotationSolverReborn is used for `NoCasting` coordination only; no next-positional query IPC was found, so event data can be stale or unavailable.
 - The overlay is a simple text overlay, not a world-space marker.

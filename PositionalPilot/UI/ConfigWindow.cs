@@ -132,6 +132,7 @@ internal sealed class ConfigWindow
         ImGui.TextUnformatted($"Target: {(s.HasTarget ? s.TargetName : "none")}");
         ImGui.TextUnformatted($"Target positionals: {positionals}");
         ImGui.TextUnformatted($"Target targeting player: {s.TargetTargetsPlayer}");
+        ImGui.TextUnformatted($"Target rotating: {s.TargetIsRotating}");
         ImGui.TextUnformatted($"Target hitbox: {s.TargetHitboxRadius:F2}");
         ImGui.TextUnformatted($"Recommended positional: {controller.CurrentPositional}");
         ImGui.TextUnformatted($"Movement positional: {controller.CurrentMovementPositional}");

@@ -53,7 +53,7 @@ internal sealed class MovementController
     public string CurrentMovementPositionalSource { get; private set; } = "not evaluated";
     public string CurrentMovementMode => PositionalMovementRules.MovementModeName(CurrentMovementPositional);
     public RotationSolverNextActionInfo LastRotationSolverNextAction => rotationSolver.GetNextGcdActionInfo();
-    public GameSnapshot LastSnapshot { get; private set; } = new(false, default, 0, 0, false, false, false, false, 0, string.Empty, 0, 0, default, 0, 0, null, false, false, false, false);
+    public GameSnapshot LastSnapshot { get; private set; } = new(false, default, 0, 0, false, false, false, false, 0, string.Empty, 0, 0, default, 0, 0, null, false, false, false, false, false);
 
     public void Update()
     {
@@ -108,7 +108,8 @@ internal sealed class MovementController
         CurrentPositional = cachedSafety.Positional;
         var nextAction = rotationSolver.GetNextGcdActionInfo();
         var movementPositional = ResolveMovementPositional(nextAction);
-        var frontEscape = IsPlayerCurrentlyInFront(LastSnapshot);
+        var targetTrackingPlayer = LastSnapshot.TargetTargetsPlayer && LastSnapshot.TargetIsRotating;
+        var frontEscape = IsPlayerCurrentlyInFront(LastSnapshot) && !targetTrackingPlayer;
         if (frontEscape && !PositionalMovementRules.IsCommittedPositional(movementPositional))
             CurrentMovementPositionalSource = "front escape to rear/flank border";
 
@@ -148,6 +149,7 @@ internal sealed class MovementController
         if (!safety.CanMoveTo(LastSnapshot, cachedSafety, selected.Position, out reason))
         {
             BlockReason = reason;
+            MaybeTriggerNoCasting(LastSnapshot, selected);
             State = MovementState.Blocked;
             RecordMovementCadence(movementPositional);
             return;
@@ -168,6 +170,8 @@ internal sealed class MovementController
             RecordMovementCadence(movementPositional);
             return;
         }
+
+        MaybeTriggerNoCasting(LastSnapshot, selected);
 
         if (wasMoving &&
             cachedSafety.VnavmeshNavigating &&
@@ -192,7 +196,6 @@ internal sealed class MovementController
             return;
         }
 
-        MaybeTriggerNoCasting(LastSnapshot, selected);
         BlockReason = string.Empty;
         State = MovementState.Moving;
         nextRepath = DateTime.UtcNow.AddMilliseconds(config.Settings.RepathCooldownMs);
@@ -296,8 +299,8 @@ internal sealed class MovementController
             return Block($"not a melee job (job {snapshot.JobId})", out reason);
         if (snapshot.TargetOmnidirectional == true)
             return Block("target does not require positionals", out reason);
-        if (snapshot.TargetTargetsPlayer)
-            return Block("target is targeting player", out reason);
+        if (snapshot.TargetTargetsPlayer && snapshot.TargetIsRotating)
+            return Block("target is tracking player", out reason);
 
         reason = string.Empty;
         return false;
@@ -425,17 +428,21 @@ internal sealed class MovementController
             return "cooldown";
 
         var next = rotationSolver.GetNextGcdActionInfo();
-        if (next.NextGcdActionId == 0)
-            return "next action unknown";
-        if (DateTime.UtcNow - next.NextGcdUpdatedAt > TimeSpan.FromMilliseconds(config.Settings.RsrNextActionMaxAgeMs))
-            return "next action stale";
-        if (next.NextGcdRequirement is not (PositionalRequirement.Rear or PositionalRequirement.Flank))
+        var resolved = PositionalMovementRules.ResolveRsrMovementRequirement(
+            next.NextGcdRequirement,
+            next.NextGcdUpdatedAt,
+            next.NextActionRequirement,
+            next.NextActionUpdatedAt,
+            DateTime.UtcNow,
+            config.Settings.RsrNextActionMaxAgeMs,
+            out var source);
+        if (resolved is not (PositionalRequirement.Rear or PositionalRequirement.Flank))
             return "next action not positional";
-        if (next.NextGcdRequirement != selected.Requirement)
-            return $"next positional {next.NextGcdRequirement} does not match movement {selected.Requirement}";
+        if (resolved != selected.Requirement)
+            return $"next positional {resolved} does not match movement {selected.Requirement}";
 
         var target = new TargetSnapshot(snapshot.TargetPosition, snapshot.TargetRotation, snapshot.TargetHitboxRadius);
-        if (PositionalGeometry.IsPositionInRequiredSlice(snapshot.PlayerPosition, target, next.NextGcdRequirement))
+        if (PositionalGeometry.IsPositionInRequiredSlice(snapshot.PlayerPosition, target, resolved))
             return "already in slice";
 
         duration = Math.Clamp(config.Settings.NoCastingDurationSeconds, 0.1f, 2.0f);

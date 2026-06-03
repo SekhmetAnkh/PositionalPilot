@@ -13,6 +13,9 @@ internal sealed unsafe class GameStateReader
     private readonly PluginServices services;
     private Vector3 lastPlayerPosition;
     private DateTime lastPositionSample = DateTime.MinValue;
+    private ulong lastTargetId;
+    private float lastTargetRotation;
+    private DateTime lastTargetRotationSample = DateTime.MinValue;
 
     private static readonly HashSet<uint> MeleeJobs = new()
     {
@@ -60,6 +63,7 @@ internal sealed unsafe class GameStateReader
                 false,
                 false,
                 false,
+                false,
                 IsTrueNorthAvailable());
         }
 
@@ -83,6 +87,7 @@ internal sealed unsafe class GameStateReader
             target.HitboxRadius,
             TryGetTargetOmnidirectional(targetBaseId),
             IsTargetTargetingPlayer(target, player.GameObjectId),
+            IsTargetRotating(target.GameObjectId, target.Rotation),
             target.CurrentHp > 0,
             target.IsTargetable,
             IsTrueNorthAvailable());
@@ -107,6 +112,7 @@ internal sealed unsafe class GameStateReader
         0,
         0,
         null,
+        false,
         false,
         false,
         false,
@@ -159,5 +165,31 @@ internal sealed unsafe class GameStateReader
             services.Log.Debug(ex, "Failed to read target-of-target for {TargetName}", target.Name.ToString());
             return true;
         }
+    }
+
+    private bool IsTargetRotating(ulong targetId, float targetRotation)
+    {
+        const float rotationThresholdRadians = 0.05f;
+        if (lastTargetRotationSample == DateTime.MinValue || lastTargetId != targetId)
+        {
+            lastTargetId = targetId;
+            lastTargetRotation = targetRotation;
+            lastTargetRotationSample = DateTime.UtcNow;
+            return false;
+        }
+
+        var changed = MathF.Abs(NormalizeSignedRadians(targetRotation - lastTargetRotation)) > rotationThresholdRadians;
+        lastTargetRotation = targetRotation;
+        lastTargetRotationSample = DateTime.UtcNow;
+        return changed;
+    }
+
+    private static float NormalizeSignedRadians(float radians)
+    {
+        while (radians > MathF.PI)
+            radians -= MathF.PI * 2f;
+        while (radians < -MathF.PI)
+            radians += MathF.PI * 2f;
+        return radians;
     }
 }
