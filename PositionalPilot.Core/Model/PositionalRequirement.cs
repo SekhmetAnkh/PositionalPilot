@@ -6,5 +6,6 @@ public enum PositionalRequirement
     Rear,
     Flank,
     Any,
+    Front,
     Unknown,
 }

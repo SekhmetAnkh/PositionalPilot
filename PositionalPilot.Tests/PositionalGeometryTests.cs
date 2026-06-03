@@ -13,7 +13,7 @@ public sealed class PositionalGeometryTests
         Assert.Equal(PositionalRequirement.Any, PositionalGeometry.MapBossModPositional(0));
         Assert.Equal(PositionalRequirement.Flank, PositionalGeometry.MapBossModPositional(1));
         Assert.Equal(PositionalRequirement.Rear, PositionalGeometry.MapBossModPositional(2));
-        Assert.Equal(PositionalRequirement.Unknown, PositionalGeometry.MapBossModPositional(3));
+        Assert.Equal(PositionalRequirement.Front, PositionalGeometry.MapBossModPositional(3));
     }
 
     [Fact]
@@ -67,6 +67,16 @@ public sealed class PositionalGeometryTests
     public void RotationSolverMeleePositionalMapFailsClosedForUnknownActions()
     {
         Assert.False(PositionalActionMap.TryGetRequirement(999999, out _));
+    }
+
+    [Fact]
+    public void FrontIsNeverTreatedAsAValidPpilotSlice()
+    {
+        var target = new TargetSnapshot(Vector3.Zero, 0, 1);
+
+        Assert.False(PositionalGeometry.AngleMatchesRequirement(0, 0, PositionalRequirement.Front, out _));
+        Assert.False(PositionalGeometry.IsPositionInRequiredSlice(new Vector3(0, 0, 4), target, PositionalRequirement.Front));
+        Assert.Equal("front blocked", PositionalMovementRules.MovementModeName(PositionalRequirement.Front));
     }
 
     [Fact]

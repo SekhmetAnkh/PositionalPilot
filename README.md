@@ -28,7 +28,7 @@ BossModReborn:
 - `BossMod.AI.NaviTargetPos` -> `Vector3?`
 - `BossMod.AI.PlayerSpeed` -> `float`
 
-BossMod positional enum mapping was verified as `Any=0`, `Flank=1`, `Rear=2`, `Front=3`. PositionalPilot maps `Front` to `Unknown` and will not move for it.
+BossMod positional enum mapping was verified as `Any=0`, `Flank=1`, `Rear=2`, `Front=3`. PositionalPilot treats `Front` as an explicit hard block: it will not choose or hold front itself, and will stand down so BossMod safety/AI can own movement if front is required.
 
 vnavmesh:
 
@@ -106,6 +106,7 @@ The repository manifest points to the latest GitHub release asset named `latest.
 - Movement uses a single destination per update and does not probe multiple vnavmesh paths.
 - `Any` uses loose rear/flank border holding; committed `Rear`/`Flank` movement uses a deeper default angle and tighter deadzone to avoid playing on the edge.
 - Fresh known RSR next-GCD positional changes can bypass the repath cooldown once, so it reacts faster without repeatedly querying vnavmesh.
+- BossMod `Front` recommendations are never converted into ppilot movement destinations. They block ppilot movement and show as `front blocked`.
 - Safety/dependency checks are cached briefly to avoid polling BossMod/vnavmesh every frame.
 - Targets whose `BNpcBase.IsOmnidirectional` flag is true are treated as not requiring positionals, so assist movement is blocked.
 - Fresh known RotationSolver next-GCD positionals can select the movement slice even when BossMod recommends `Any`, so PositionalPilot can pre-position instead of relying on True North.

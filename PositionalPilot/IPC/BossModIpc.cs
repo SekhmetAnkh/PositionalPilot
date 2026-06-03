@@ -50,7 +50,7 @@ internal sealed class BossModIpc : IpcAdapterBase
         if (TryCall(nameof(TryGetRecommendedPositional), () => recommended.InvokeFunc(), out var raw))
         {
             positional = PositionalGeometry.MapBossModPositional(raw);
-            return positional != PositionalRequirement.Unknown;
+            return positional is not PositionalRequirement.Unknown;
         }
 
         positional = PositionalRequirement.Unknown;

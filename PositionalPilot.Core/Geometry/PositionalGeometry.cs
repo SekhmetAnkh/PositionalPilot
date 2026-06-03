@@ -87,7 +87,7 @@ public static class PositionalGeometry
         out float deviation)
     {
         deviation = 0;
-        if (requirement is PositionalRequirement.None or PositionalRequirement.Unknown)
+        if (requirement is PositionalRequirement.None or PositionalRequirement.Front or PositionalRequirement.Unknown)
             return false;
 
         if (requirement == PositionalRequirement.Any)
@@ -118,7 +118,7 @@ public static class PositionalGeometry
             0 => PositionalRequirement.Any,
             1 => PositionalRequirement.Flank,
             2 => PositionalRequirement.Rear,
-            3 => PositionalRequirement.Unknown,
+            3 => PositionalRequirement.Front,
             _ => PositionalRequirement.Unknown,
         };
     }

@@ -5,7 +5,7 @@
     "Punchline": "Assistive, safety-gated melee positional movement.",
     "Description": "Suggests or safely moves toward BossMod-recommended rear/flank positions using vnavmesh when explicitly enabled. Off by default, fail-closed, and no stealth or bypass behavior.",
     "InternalName": "PositionalPilot",
-    "AssemblyVersion": "0.1.16.0",
+    "AssemblyVersion": "0.1.17.0",
     "RepoUrl": "https://github.com/SekhmetAnkh/PositionalPilot",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -21,7 +21,7 @@
     "IsHide": false,
     "IsTestingExclusive": false,
     "DownloadCount": 0,
-    "LastUpdate": 1780431012,
+    "LastUpdate": 1780484066,
     "DownloadLinkInstall": "https://github.com/SekhmetAnkh/PositionalPilot/releases/latest/download/latest.zip",
     "DownloadLinkTesting": "https://github.com/SekhmetAnkh/PositionalPilot/releases/latest/download/latest.zip",
     "DownloadLinkUpdate": "https://github.com/SekhmetAnkh/PositionalPilot/releases/latest/download/latest.zip"

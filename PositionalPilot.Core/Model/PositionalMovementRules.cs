@@ -6,7 +6,9 @@ public static class PositionalMovementRules
         requirement is PositionalRequirement.Rear or PositionalRequirement.Flank;
 
     public static string MovementModeName(PositionalRequirement requirement) =>
-        IsCommittedPositional(requirement) ? "committed positional" : "border hold";
+        requirement == PositionalRequirement.Front
+            ? "front blocked"
+            : IsCommittedPositional(requirement) ? "committed positional" : "border hold";
 
     public static bool ShouldBypassRepathCooldown(
         PositionalRequirement previousMovementPositional,

@@ -117,6 +117,17 @@ internal sealed class MovementController
         }
 
         CurrentPositional = positional;
+        if (positional == PositionalRequirement.Front)
+        {
+            CurrentMovementPositional = PositionalRequirement.Front;
+            CurrentMovementPositionalSource = "BossMod front recommendation";
+            BlockReason = "BossMod recommends front; PositionalPilot will not hold front";
+            if (State == MovementState.Moving)
+                Stop(BlockReason);
+            State = MovementState.Blocked;
+            return;
+        }
+
         var nextAction = rotationSolver.GetNextGcdActionInfo();
         var movementPositional = ResolveMovementPositional(positional, nextAction);
         var bypassRepathCooldown = PositionalMovementRules.ShouldBypassRepathCooldown(
@@ -355,6 +366,9 @@ internal sealed class MovementController
     {
         CurrentMovementPositional = bossModPositional;
         CurrentMovementPositionalSource = "BossMod";
+
+        if (bossModPositional == PositionalRequirement.Front)
+            return bossModPositional;
 
         if (!next.EventsAvailable)
             return bossModPositional;
