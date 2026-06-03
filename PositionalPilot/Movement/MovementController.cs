@@ -269,7 +269,7 @@ internal sealed class MovementController
         var destination = PositionalGeometry.CreateBorderDestination(snapshot.PlayerPosition, target, positional, selectedSide, config.Settings);
         if (!IsDestinationInRequestedSlice(target, destination))
         {
-            destinationFailureReason = "destination is outside requested positional slice";
+            destinationFailureReason = "destination is not rear/flank safe";
             currentDestination = null;
             logger.Debug(config, "border-destination", $"{destinationFailureReason}; side={selectedSide}; positional={positional}");
             return null;
@@ -437,9 +437,14 @@ internal sealed class MovementController
     private static bool IsDestinationInRequestedSlice(TargetSnapshot target, BorderDestination destination)
     {
         if (destination.Requirement == PositionalRequirement.Any)
-            return true;
+        {
+            var slice = PositionalGeometry.ClassifyPositionRelativeToTarget(destination.Position, target);
+            return slice is PositionalRequirement.Rear or PositionalRequirement.Flank &&
+                   PositionalGeometry.GetFacingAngleToPosition(destination.Position, target) >= MathF.PI * 3f / 4f - 0.01f;
+        }
 
-        return PositionalGeometry.IsPositionInRequiredSlice(destination.Position, target, destination.Requirement);
+        return PositionalGeometry.IsPositionInRequiredSlice(destination.Position, target, destination.Requirement) &&
+               PositionalGeometry.ClassifyPositionRelativeToTarget(destination.Position, target) != PositionalRequirement.Front;
     }
 
     private bool RecentlyFailedPath(Vector3 destination) =>

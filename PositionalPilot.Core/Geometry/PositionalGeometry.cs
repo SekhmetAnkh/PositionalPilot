@@ -6,7 +6,8 @@ namespace PositionalPilot.Core.Geometry;
 public static class PositionalGeometry
 {
     private const float TwoPi = MathF.PI * 2f;
-    private const float RearFlankBorderOffset = MathF.PI * 3f / 4f;
+    private const float FrontHalfAngle = MathF.PI / 4f;
+    private const float RearHalfAngle = MathF.PI * 3f / 4f;
 
     public static BorderDestination CreateBorderDestination(
         Vector3 playerPosition,
@@ -15,14 +16,14 @@ public static class PositionalGeometry
         BorderSide side,
         PositionalPilotSettings settings)
     {
-        var angle = GetBorderAngle(target.RotationRadians, side);
+        var direction = GetBorderDirection(target.RotationRadians, side);
         if (requirement is PositionalRequirement.Rear or PositionalRequirement.Flank)
-            angle = NudgeBorderAngle(angle, side, requirement, DegreesToRadians(settings.PositionalNudgeDegrees));
+            direction = NudgeBorderDirection(target.RotationRadians, side, requirement, DegreesToRadians(settings.PositionalNudgeDegrees));
 
         var radius = target.HitboxRadius + settings.DesiredDistanceFromTargetHitbox;
-        var point = target.Position + PointOnRing(angle, radius);
+        var point = target.Position + direction * radius;
         var distance = DistanceXZ(playerPosition, point);
-        var deviation = GetRequirementDeviation(angle, target.RotationRadians, requirement);
+        var deviation = GetRequirementDeviation(point, target, requirement);
         var score = distance + deviation * 1.5f;
         return new BorderDestination(point, side, requirement, distance, deviation, score);
     }
@@ -55,9 +56,19 @@ public static class PositionalGeometry
     }
 
     public static float GetBorderAngle(float targetRotation, BorderSide side) =>
-        side == BorderSide.Left
-            ? NormalizeAngle(targetRotation + RearFlankBorderOffset)
-            : NormalizeAngle(targetRotation - RearFlankBorderOffset);
+        DirectionToAngle(GetBorderDirection(targetRotation, side));
+
+    public static Vector3 GetFaceVector(float targetRotation) =>
+        NormalizeXZ(new Vector3(MathF.Sin(targetRotation), 0, MathF.Cos(targetRotation)));
+
+    public static Vector3 GetBorderDirection(float targetRotation, BorderSide side)
+    {
+        var face = GetFaceVector(targetRotation);
+        var rear = -face;
+        var right = new Vector3(face.Z, 0, -face.X);
+        var left = -right;
+        return NormalizeXZ(rear + (side == BorderSide.Left ? left : right));
+    }
 
     public static bool AngleMatchesRequirement(
         float worldAngle,
@@ -75,8 +86,35 @@ public static class PositionalGeometry
         if (requirement == PositionalRequirement.Any)
             return true;
 
-        var angle = NormalizeAngle(MathF.Atan2(position.X - target.Position.X, position.Z - target.Position.Z));
-        return AngleMatchesRequirement(angle, target.RotationRadians, requirement, sectorMarginDegrees, out _);
+        if (requirement is PositionalRequirement.Front or PositionalRequirement.None or PositionalRequirement.Unknown)
+            return false;
+
+        var angle = GetFacingAngleToPosition(position, target);
+        var margin = DegreesToRadians(sectorMarginDegrees);
+        return requirement == PositionalRequirement.Rear
+            ? angle >= RearHalfAngle + margin
+            : angle >= FrontHalfAngle + margin && angle <= RearHalfAngle - margin;
+    }
+
+    public static PositionalRequirement ClassifyPositionRelativeToTarget(Vector3 position, TargetSnapshot target)
+    {
+        var angle = GetFacingAngleToPosition(position, target);
+        if (angle < FrontHalfAngle)
+            return PositionalRequirement.Front;
+        if (angle > RearHalfAngle)
+            return PositionalRequirement.Rear;
+        return PositionalRequirement.Flank;
+    }
+
+    public static float GetFacingAngleToPosition(Vector3 position, TargetSnapshot target)
+    {
+        var dir = NormalizeXZ(position - target.Position);
+        if (dir == Vector3.Zero)
+            return 0;
+
+        var face = GetFaceVector(target.RotationRadians);
+        var dot = Math.Clamp(Vector3.Dot(face, dir), -1.0f, 1.0f);
+        return MathF.Acos(dot);
     }
 
     public static bool AngleMatchesRequirement(
@@ -93,21 +131,19 @@ public static class PositionalGeometry
         if (requirement == PositionalRequirement.Any)
             return true;
 
-        var rear = NormalizeAngle(targetRotation + MathF.PI);
-        var leftFlank = NormalizeAngle(targetRotation + MathF.PI / 2f);
-        var rightFlank = NormalizeAngle(targetRotation - MathF.PI / 2f);
-        var sectorHalfAngle = MathF.Max(0, MathF.PI / 4f - DegreesToRadians(sectorMarginDegrees));
+        var position = PointOnRing(worldAngle, 1);
+        var target = new TargetSnapshot(Vector3.Zero, targetRotation, 0);
+        var faceAngle = GetFacingAngleToPosition(position, target);
+        var margin = DegreesToRadians(sectorMarginDegrees);
 
         if (requirement == PositionalRequirement.Rear)
         {
-            deviation = AbsAngleDelta(worldAngle, rear);
-            return deviation <= sectorHalfAngle;
+            deviation = MathF.Abs(MathF.PI - faceAngle);
+            return faceAngle >= RearHalfAngle + margin;
         }
 
-        var leftDev = AbsAngleDelta(worldAngle, leftFlank);
-        var rightDev = AbsAngleDelta(worldAngle, rightFlank);
-        deviation = MathF.Min(leftDev, rightDev);
-        return deviation <= sectorHalfAngle;
+        deviation = MathF.Min(MathF.Abs(MathF.PI / 2f - faceAngle), MathF.Abs(RearHalfAngle - faceAngle));
+        return faceAngle >= FrontHalfAngle + margin && faceAngle <= RearHalfAngle - margin;
     }
 
     public static PositionalRequirement MapBossModPositional(int raw)
@@ -130,39 +166,49 @@ public static class PositionalGeometry
         return MathF.Sqrt(dx * dx + dz * dz);
     }
 
-    private static float NudgeBorderAngle(float borderAngle, BorderSide side, PositionalRequirement requirement, float nudgeRadians)
+    private static Vector3 NudgeBorderDirection(float targetRotation, BorderSide side, PositionalRequirement requirement, float nudgeRadians)
     {
-        if (side == BorderSide.Left)
-            return NormalizeAngle(borderAngle + (requirement == PositionalRequirement.Rear ? nudgeRadians : -nudgeRadians));
+        var face = GetFaceVector(targetRotation);
+        var rear = -face;
+        var right = new Vector3(face.Z, 0, -face.X);
+        var left = -right;
+        var sideDirection = side == BorderSide.Left ? left : right;
+        var offsetFromRear = Math.Clamp(MathF.PI / 4f + (requirement == PositionalRequirement.Rear ? -nudgeRadians : nudgeRadians), 0, MathF.PI / 2f);
 
-        return NormalizeAngle(borderAngle + (requirement == PositionalRequirement.Rear ? -nudgeRadians : nudgeRadians));
+        return NormalizeXZ(rear * MathF.Cos(offsetFromRear) + sideDirection * MathF.Sin(offsetFromRear));
     }
 
-    private static float GetRequirementDeviation(float angle, float targetRotation, PositionalRequirement requirement)
+    private static float GetRequirementDeviation(Vector3 point, TargetSnapshot target, PositionalRequirement requirement)
     {
         if (requirement == PositionalRequirement.Any)
             return 0;
 
-        AngleMatchesRequirement(angle, targetRotation, requirement, out var deviation);
-        return deviation;
+        var angle = GetFacingAngleToPosition(point, target);
+        if (requirement == PositionalRequirement.Rear)
+            return MathF.Abs(MathF.PI - angle);
+        if (requirement == PositionalRequirement.Flank)
+            return MathF.Min(MathF.Abs(MathF.PI / 2f - angle), MathF.Abs(RearHalfAngle - angle));
+        return MathF.PI;
     }
 
     private static Vector3 PointOnRing(float angle, float radius) =>
         new(MathF.Sin(angle) * radius, 0, MathF.Cos(angle) * radius);
-
-    private static float AbsAngleDelta(float a, float b)
-    {
-        var delta = NormalizeAngle(a - b);
-        if (delta > MathF.PI)
-            delta -= TwoPi;
-        return MathF.Abs(delta);
-    }
 
     private static float NormalizeAngle(float angle)
     {
         angle %= TwoPi;
         return angle < 0 ? angle + TwoPi : angle;
     }
+
+    private static Vector3 NormalizeXZ(Vector3 vector)
+    {
+        vector.Y = 0;
+        var length = MathF.Sqrt(vector.X * vector.X + vector.Z * vector.Z);
+        return length <= 0.0001f ? Vector3.Zero : vector / length;
+    }
+
+    private static float DirectionToAngle(Vector3 direction) =>
+        NormalizeAngle(MathF.Atan2(direction.X, direction.Z));
 
     private static float DegreesToRadians(float degrees) => degrees * MathF.PI / 180f;
 }

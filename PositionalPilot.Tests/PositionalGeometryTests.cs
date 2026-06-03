@@ -88,12 +88,11 @@ public sealed class PositionalGeometryTests
         var left = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Any, BorderSide.Left, settings);
         var right = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Any, BorderSide.Right, settings);
 
-        Assert.True(left.Position.X > 0);
         Assert.True(left.Position.Z < 0);
-        Assert.True(right.Position.X < 0);
         Assert.True(right.Position.Z < 0);
-        Assert.True(PositionalGeometry.AngleMatchesRequirement(AngleOf(left.Position), 0, PositionalRequirement.Rear, out _));
-        Assert.True(PositionalGeometry.AngleMatchesRequirement(AngleOf(left.Position), 0, PositionalRequirement.Flank, out _));
+        Assert.True(MathF.Sign(left.Position.X) != MathF.Sign(right.Position.X));
+        AssertBorderAnchor(target, left.Position);
+        AssertBorderAnchor(target, right.Position);
     }
 
     [Fact]
@@ -117,15 +116,42 @@ public sealed class PositionalGeometryTests
         var rear = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Rear, BorderSide.Left, settings);
         var flank = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Flank, BorderSide.Left, settings);
 
-        var anyAngle = AngleOf(any.Position);
-        var rearAngle = AngleOf(rear.Position);
-        var flankAngle = AngleOf(flank.Position);
-        PositionalGeometry.AngleMatchesRequirement(anyAngle, 0, PositionalRequirement.Rear, out var anyRearDeviation);
-        PositionalGeometry.AngleMatchesRequirement(rearAngle, 0, PositionalRequirement.Rear, out var rearDeviation);
-        PositionalGeometry.AngleMatchesRequirement(flankAngle, 0, PositionalRequirement.Flank, out var flankDeviation);
+        var anyAngle = PositionalGeometry.GetFacingAngleToPosition(any.Position, target);
+        var rearAngle = PositionalGeometry.GetFacingAngleToPosition(rear.Position, target);
+        var flankAngle = PositionalGeometry.GetFacingAngleToPosition(flank.Position, target);
 
-        Assert.True(rearDeviation < anyRearDeviation);
-        Assert.True(flankDeviation < anyRearDeviation);
+        Assert.True(rearAngle > anyAngle);
+        Assert.True(flankAngle < anyAngle);
+    }
+
+    [Theory]
+    [InlineData(0f)]
+    [InlineData(1.5707964f)]
+    [InlineData(3.1415927f)]
+    [InlineData(-1.5707964f)]
+    public void BorderAnchorsStayOnRearFlankBoundaryAcrossRotations(float rotation)
+    {
+        var settings = new PositionalPilotSettings();
+        var target = new TargetSnapshot(Vector3.Zero, rotation, 1);
+
+        var left = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Any, BorderSide.Left, settings);
+        var right = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Any, BorderSide.Right, settings);
+
+        AssertBorderAnchor(target, left.Position);
+        AssertBorderAnchor(target, right.Position);
+    }
+
+    [Fact]
+    public void FrontFlankBoundaryIsRejectedForBorderHold()
+    {
+        var target = new TargetSnapshot(Vector3.Zero, 0, 1);
+        var frontRight = Vector3.Normalize(PositionalGeometry.GetFaceVector(0) + new Vector3(1, 0, 0)) * 4;
+        var frontLeft = Vector3.Normalize(PositionalGeometry.GetFaceVector(0) + new Vector3(-1, 0, 0)) * 4;
+
+        Assert.True(PositionalGeometry.GetFacingAngleToPosition(frontRight, target) < MathF.PI * 3f / 4f);
+        Assert.True(PositionalGeometry.GetFacingAngleToPosition(frontLeft, target) < MathF.PI * 3f / 4f);
+        Assert.False(PositionalGeometry.ClassifyPositionRelativeToTarget(frontRight, target) == PositionalRequirement.Rear);
+        Assert.False(PositionalGeometry.ClassifyPositionRelativeToTarget(frontLeft, target) == PositionalRequirement.Rear);
     }
 
     [Fact]
@@ -140,8 +166,13 @@ public sealed class PositionalGeometryTests
         var oldFlank = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Flank, BorderSide.Left, oldSettings);
         var newFlank = PositionalGeometry.CreateBorderDestination(Vector3.Zero, target, PositionalRequirement.Flank, BorderSide.Left, newSettings);
 
-        Assert.True(newRear.AngularDeviationRadians < oldRear.AngularDeviationRadians);
-        Assert.True(newFlank.AngularDeviationRadians < oldFlank.AngularDeviationRadians);
+        var oldRearAngle = PositionalGeometry.GetFacingAngleToPosition(oldRear.Position, target);
+        var newRearAngle = PositionalGeometry.GetFacingAngleToPosition(newRear.Position, target);
+        var oldFlankAngle = PositionalGeometry.GetFacingAngleToPosition(oldFlank.Position, target);
+        var newFlankAngle = PositionalGeometry.GetFacingAngleToPosition(newFlank.Position, target);
+
+        Assert.True(newRearAngle > oldRearAngle);
+        Assert.True(newFlankAngle < oldFlankAngle);
         Assert.True(PositionalGeometry.IsPositionInRequiredSlice(newRear.Position, target, PositionalRequirement.Rear));
         Assert.True(PositionalGeometry.IsPositionInRequiredSlice(newFlank.Position, target, PositionalRequirement.Flank));
     }
@@ -178,10 +209,19 @@ public sealed class PositionalGeometryTests
 
         Assert.True(left.Position.Z < 0);
         Assert.True(right.Position.Z < 0);
-        Assert.True(left.Position.X > 0);
-        Assert.True(right.Position.X < 0);
+        Assert.True(MathF.Sign(left.Position.X) != MathF.Sign(right.Position.X));
+        AssertBorderAnchor(target, left.Position);
+        AssertBorderAnchor(target, right.Position);
         Assert.False(PositionalGeometry.IsPositionInRequiredSlice(left.Position, target, PositionalRequirement.Front));
         Assert.False(PositionalGeometry.IsPositionInRequiredSlice(right.Position, target, PositionalRequirement.Front));
+    }
+
+    private static void AssertBorderAnchor(TargetSnapshot target, Vector3 position)
+    {
+        var angle = PositionalGeometry.GetFacingAngleToPosition(position, target);
+        Assert.InRange(angle, MathF.PI * 3f / 4f - 0.001f, MathF.PI * 3f / 4f + 0.001f);
+        Assert.True(PositionalGeometry.ClassifyPositionRelativeToTarget(position, target) is PositionalRequirement.Flank or PositionalRequirement.Rear);
+        Assert.NotEqual(PositionalRequirement.Front, PositionalGeometry.ClassifyPositionRelativeToTarget(position, target));
     }
 
     private static float AngleOf(Vector3 point)
