@@ -53,7 +53,7 @@ internal sealed class MovementController
     public string CurrentMovementPositionalSource { get; private set; } = "not evaluated";
     public string CurrentMovementMode => PositionalMovementRules.MovementModeName(CurrentMovementPositional);
     public RotationSolverNextActionInfo LastRotationSolverNextAction => rotationSolver.GetNextGcdActionInfo();
-    public GameSnapshot LastSnapshot { get; private set; } = new(false, default, 0, 0, false, false, false, false, 0, string.Empty, 0, 0, default, 0, 0, null, false, false, false);
+    public GameSnapshot LastSnapshot { get; private set; } = new(false, default, 0, 0, false, false, false, false, 0, string.Empty, 0, 0, default, 0, 0, null, false, false, false, false);
 
     public void Update()
     {
@@ -296,6 +296,8 @@ internal sealed class MovementController
             return Block($"not a melee job (job {snapshot.JobId})", out reason);
         if (snapshot.TargetOmnidirectional == true)
             return Block("target does not require positionals", out reason);
+        if (snapshot.TargetTargetsPlayer)
+            return Block("target is targeting player", out reason);
 
         reason = string.Empty;
         return false;

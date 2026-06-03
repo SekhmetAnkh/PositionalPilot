@@ -19,6 +19,7 @@ internal sealed record GameSnapshot(
     float TargetRotation,
     float TargetHitboxRadius,
     bool? TargetOmnidirectional,
+    bool TargetTargetsPlayer,
     bool TargetAlive,
     bool TargetTargetable,
     bool TrueNorthAvailable);

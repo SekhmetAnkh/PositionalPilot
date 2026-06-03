@@ -38,6 +38,8 @@ internal sealed class SafetyGate
             return Block($"not a melee job (job {snapshot.JobId})", out reason);
         if (snapshot.TargetOmnidirectional == true)
             return Block("target does not require positionals", out reason);
+        if (snapshot.TargetTargetsPlayer)
+            return Block("target is targeting player", out reason);
         if (s.RequiredDependencies.HasFlag(RequiredDependencies.RequireVnavmesh) && !safety.VnavmeshReady)
             return Block("vnavmesh unavailable or navmesh not ready", out reason);
         if (s.RequiredDependencies.HasFlag(RequiredDependencies.RequireBossModSafety) && !bossMod.Available)

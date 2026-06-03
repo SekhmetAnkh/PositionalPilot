@@ -59,6 +59,7 @@ internal sealed unsafe class GameStateReader
                 null,
                 false,
                 false,
+                false,
                 IsTrueNorthAvailable());
         }
 
@@ -81,6 +82,7 @@ internal sealed unsafe class GameStateReader
             target.Rotation,
             target.HitboxRadius,
             TryGetTargetOmnidirectional(targetBaseId),
+            IsTargetTargetingPlayer(target, player.GameObjectId),
             target.CurrentHp > 0,
             target.IsTargetable,
             IsTrueNorthAvailable());
@@ -105,6 +107,7 @@ internal sealed unsafe class GameStateReader
         0,
         0,
         null,
+        false,
         false,
         false,
         false);
@@ -142,6 +145,19 @@ internal sealed unsafe class GameStateReader
         {
             services.Log.Debug(ex, "Failed to read BNpcBase omnidirectional flag for {BaseId}", targetBaseId);
             return null;
+        }
+    }
+
+    private bool IsTargetTargetingPlayer(IBattleChara target, ulong playerObjectId)
+    {
+        try
+        {
+            return target.TargetObjectId == playerObjectId;
+        }
+        catch (Exception ex)
+        {
+            services.Log.Debug(ex, "Failed to read target-of-target for {TargetName}", target.Name.ToString());
+            return true;
         }
     }
 }
