@@ -107,6 +107,7 @@ The repository manifest points to the latest GitHub release asset named `latest.
 - `Any` uses loose rear/flank border holding only: the neutral anchors are calculated from the target's facing vectors and validated behind the target between rear and flank, never flank/front.
 - Fresh known RSR next-GCD or next-action positional changes can bypass the repath cooldown once, so it reacts faster without repeatedly querying vnavmesh.
 - BossMod recommended positionals are not converted into ppilot movement destinations. If RSR does not provide a fresh known Rear/Flank action, ppilot holds the nearest rear/flank border.
+- If the player is currently in the target's front slice, ppilot treats that as an escape signal and bypasses normal repath cooldown to move toward an intended rear/flank border when BossMod safety allows it.
 - Safety/dependency checks are cached briefly to avoid polling BossMod/vnavmesh every frame.
 - Targets whose `BNpcBase.IsOmnidirectional` flag is true are treated as not requiring positionals, so assist movement is blocked.
 - Fresh known RotationSolver next-GCD or next-action positionals select the movement slice, so PositionalPilot can pre-position instead of relying on True North.

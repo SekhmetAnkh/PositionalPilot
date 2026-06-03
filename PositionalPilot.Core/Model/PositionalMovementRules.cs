@@ -7,15 +7,19 @@ public static class PositionalMovementRules
 
     public static string MovementModeName(PositionalRequirement requirement) =>
         requirement == PositionalRequirement.Front
-            ? "front blocked"
+            ? "front escape"
             : IsCommittedPositional(requirement) ? "committed positional" : "border hold";
 
     public static bool ShouldBypassRepathCooldown(
         PositionalRequirement previousMovementPositional,
         PositionalRequirement currentMovementPositional,
         uint previousNextGcdActionId,
-        uint currentNextGcdActionId)
+        uint currentNextGcdActionId,
+        bool frontEscape = false)
     {
+        if (frontEscape)
+            return true;
+
         if (!IsCommittedPositional(currentMovementPositional))
             return false;
 

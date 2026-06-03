@@ -108,11 +108,16 @@ internal sealed class MovementController
         CurrentPositional = cachedSafety.Positional;
         var nextAction = rotationSolver.GetNextGcdActionInfo();
         var movementPositional = ResolveMovementPositional(nextAction);
+        var frontEscape = IsPlayerCurrentlyInFront(LastSnapshot);
+        if (frontEscape && !PositionalMovementRules.IsCommittedPositional(movementPositional))
+            CurrentMovementPositionalSource = "front escape to rear/flank border";
+
         var bypassRepathCooldown = PositionalMovementRules.ShouldBypassRepathCooldown(
             lastMovementPositional,
             movementPositional,
             lastMovementActionId,
-            currentMovementActionId);
+            currentMovementActionId,
+            frontEscape);
 
         if (config.Settings.MovementMode == MovementMode.SuggestOnly)
         {
@@ -372,6 +377,15 @@ internal sealed class MovementController
             _ => 0,
         };
         return resolved;
+    }
+
+    private static bool IsPlayerCurrentlyInFront(GameSnapshot snapshot)
+    {
+        if (!snapshot.HasTarget)
+            return false;
+
+        var target = new TargetSnapshot(snapshot.TargetPosition, snapshot.TargetRotation, snapshot.TargetHitboxRadius);
+        return PositionalGeometry.ClassifyPositionRelativeToTarget(snapshot.PlayerPosition, target) == PositionalRequirement.Front;
     }
 
     private void MaybeTriggerNoCasting(GameSnapshot snapshot, BorderDestination selected)

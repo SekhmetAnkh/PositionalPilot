@@ -70,13 +70,14 @@ public sealed class PositionalGeometryTests
     }
 
     [Fact]
-    public void FrontIsNeverTreatedAsAValidPpilotSlice()
+    public void FrontIsNeverTreatedAsAValidDestinationButCanTriggerEscape()
     {
         var target = new TargetSnapshot(Vector3.Zero, 0, 1);
 
         Assert.False(PositionalGeometry.AngleMatchesRequirement(0, 0, PositionalRequirement.Front, out _));
         Assert.False(PositionalGeometry.IsPositionInRequiredSlice(new Vector3(0, 0, 4), target, PositionalRequirement.Front));
-        Assert.Equal("front blocked", PositionalMovementRules.MovementModeName(PositionalRequirement.Front));
+        Assert.Equal("front escape", PositionalMovementRules.MovementModeName(PositionalRequirement.Front));
+        Assert.True(PositionalMovementRules.ShouldBypassRepathCooldown(PositionalRequirement.Any, PositionalRequirement.Any, 0, 0, true));
     }
 
     [Fact]
