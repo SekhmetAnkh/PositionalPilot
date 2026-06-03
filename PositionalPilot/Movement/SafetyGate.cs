@@ -40,8 +40,8 @@ internal sealed class SafetyGate
             return Block("target does not require positionals", out reason);
         if (s.RequiredDependencies.HasFlag(RequiredDependencies.RequireVnavmesh) && !safety.VnavmeshReady)
             return Block("vnavmesh unavailable or navmesh not ready", out reason);
-        if (s.RequiredDependencies.HasFlag(RequiredDependencies.RequireBossModSafety) && !safety.HasPositional)
-            return Block("BossMod safety/positional unavailable", out reason);
+        if (s.RequiredDependencies.HasFlag(RequiredDependencies.RequireBossModSafety) && !bossMod.Available)
+            return Block("BossMod safety unavailable", out reason);
         if (s.RequiredDependencies.HasFlag(RequiredDependencies.RequireCombatSolver) && !safety.RotationSolverAvailable)
             return Block("RotationSolverReborn unavailable", out reason);
         if (s.DisableDuringCasting && snapshot.IsCasting)

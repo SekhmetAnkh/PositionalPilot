@@ -28,7 +28,8 @@ internal sealed class MovementController
     private DateTime lastFailedPathTime = DateTime.MinValue;
     private DateTime nextNoCastingAllowed = DateTime.MinValue;
     private PositionalRequirement lastMovementPositional = PositionalRequirement.Unknown;
-    private uint lastNextGcdActionId;
+    private uint lastMovementActionId;
+    private uint currentMovementActionId;
 
     public MovementController(Configuration config, GameStateReader game, BossModIpc bossMod, VnavmeshIpc vnavmesh, RotationSolverIpc rotationSolver, ThrottledLogger logger)
     {
@@ -104,37 +105,14 @@ internal sealed class MovementController
             return;
         }
 
-        var positional = cachedSafety.Positional;
-        if (!cachedSafety.HasPositional ||
-            positional is PositionalRequirement.None or PositionalRequirement.Unknown)
-        {
-            CurrentPositional = positional;
-            BlockReason = "no actionable BossMod positional";
-            if (State == MovementState.Moving)
-                Stop(BlockReason);
-            State = MovementState.Blocked;
-            return;
-        }
-
-        CurrentPositional = positional;
-        if (positional == PositionalRequirement.Front)
-        {
-            CurrentMovementPositional = PositionalRequirement.Front;
-            CurrentMovementPositionalSource = "BossMod front recommendation";
-            BlockReason = "BossMod recommends front; PositionalPilot will not hold front";
-            if (State == MovementState.Moving)
-                Stop(BlockReason);
-            State = MovementState.Blocked;
-            return;
-        }
-
+        CurrentPositional = cachedSafety.Positional;
         var nextAction = rotationSolver.GetNextGcdActionInfo();
-        var movementPositional = ResolveMovementPositional(positional, nextAction);
+        var movementPositional = ResolveMovementPositional(nextAction);
         var bypassRepathCooldown = PositionalMovementRules.ShouldBypassRepathCooldown(
             lastMovementPositional,
             movementPositional,
-            lastNextGcdActionId,
-            nextAction.NextGcdActionId);
+            lastMovementActionId,
+            currentMovementActionId);
 
         if (config.Settings.MovementMode == MovementMode.SuggestOnly)
         {
@@ -157,7 +135,7 @@ internal sealed class MovementController
         {
             BlockReason = string.IsNullOrWhiteSpace(destinationFailureReason) ? "no safe destination" : destinationFailureReason;
             State = MovementState.Blocked;
-            RecordMovementCadence(movementPositional, nextAction);
+            RecordMovementCadence(movementPositional);
             return;
         }
 
@@ -166,7 +144,7 @@ internal sealed class MovementController
         {
             BlockReason = reason;
             State = MovementState.Blocked;
-            RecordMovementCadence(movementPositional, nextAction);
+            RecordMovementCadence(movementPositional);
             return;
         }
 
@@ -182,7 +160,7 @@ internal sealed class MovementController
 
             State = MovementState.Idle;
             nextRepath = DateTime.UtcNow.AddMilliseconds(config.Settings.RepathCooldownMs);
-            RecordMovementCadence(movementPositional, nextAction);
+            RecordMovementCadence(movementPositional);
             return;
         }
 
@@ -213,7 +191,7 @@ internal sealed class MovementController
         BlockReason = string.Empty;
         State = MovementState.Moving;
         nextRepath = DateTime.UtcNow.AddMilliseconds(config.Settings.RepathCooldownMs);
-        RecordMovementCadence(movementPositional, nextAction);
+        RecordMovementCadence(movementPositional);
         logger.Debug(config, "movement-start", $"Moving to {selected.Position} for {movementPositional} ({CurrentMovementPositionalSource})");
     }
 
@@ -356,30 +334,44 @@ internal sealed class MovementController
             ? MathF.Max(config.Settings.PositionalCommitDeadzoneYalms, config.Settings.StopWithinYalms)
             : (config.Settings.BorderHoldDeadzoneYalms > 0 ? config.Settings.BorderHoldDeadzoneYalms : config.Settings.HoldDeadzoneYalms);
 
-    private void RecordMovementCadence(PositionalRequirement movementPositional, RotationSolverNextActionInfo nextAction)
+    private void RecordMovementCadence(PositionalRequirement movementPositional)
     {
         lastMovementPositional = movementPositional;
-        lastNextGcdActionId = nextAction.NextGcdActionId;
+        lastMovementActionId = currentMovementActionId;
     }
 
-    private PositionalRequirement ResolveMovementPositional(PositionalRequirement bossModPositional, RotationSolverNextActionInfo next)
+    private PositionalRequirement ResolveMovementPositional(RotationSolverNextActionInfo next)
     {
-        CurrentMovementPositional = bossModPositional;
-        CurrentMovementPositionalSource = "BossMod";
-
-        if (bossModPositional == PositionalRequirement.Front)
-            return bossModPositional;
+        CurrentMovementPositional = PositionalRequirement.Any;
+        CurrentMovementPositionalSource = "nearest rear/flank border";
+        currentMovementActionId = 0;
 
         if (!next.EventsAvailable)
-            return bossModPositional;
-        if (DateTime.UtcNow - next.NextGcdUpdatedAt > TimeSpan.FromMilliseconds(config.Settings.RsrNextActionMaxAgeMs))
-            return bossModPositional;
-        if (next.NextGcdRequirement is not (PositionalRequirement.Rear or PositionalRequirement.Flank))
-            return bossModPositional;
+            return PositionalRequirement.Any;
 
-        CurrentMovementPositional = next.NextGcdRequirement;
-        CurrentMovementPositionalSource = $"RSR next GCD: {next.NextGcdActionName}";
-        return next.NextGcdRequirement;
+        var resolved = PositionalMovementRules.ResolveRsrMovementRequirement(
+            next.NextGcdRequirement,
+            next.NextGcdUpdatedAt,
+            next.NextActionRequirement,
+            next.NextActionUpdatedAt,
+            DateTime.UtcNow,
+            config.Settings.RsrNextActionMaxAgeMs,
+            out var source);
+
+        CurrentMovementPositional = resolved;
+        CurrentMovementPositionalSource = source switch
+        {
+            "RSR next GCD" => $"RSR next GCD: {next.NextGcdActionName}",
+            "RSR next action" => $"RSR next action: {next.NextActionName}",
+            _ => source,
+        };
+        currentMovementActionId = source switch
+        {
+            "RSR next GCD" => next.NextGcdActionId,
+            "RSR next action" => next.NextActionId,
+            _ => 0,
+        };
+        return resolved;
     }
 
     private void MaybeTriggerNoCasting(GameSnapshot snapshot, BorderDestination selected)

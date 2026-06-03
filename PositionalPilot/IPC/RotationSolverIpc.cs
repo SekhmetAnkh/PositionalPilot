@@ -49,6 +49,9 @@ internal sealed class RotationSolverIpc : IpcAdapterBase, IDisposable
         var requirement = PositionalActionMap.TryGetRequirement(actionId, out var mapped)
             ? mapped
             : PositionalRequirement.Unknown;
+        var nextActionRequirement = PositionalActionMap.TryGetRequirement(LatestNextActionId, out var nextActionMapped)
+            ? nextActionMapped
+            : PositionalRequirement.Unknown;
         return new RotationSolverNextActionInfo(
             actionId,
             GetActionName(actionId),
@@ -56,6 +59,7 @@ internal sealed class RotationSolverIpc : IpcAdapterBase, IDisposable
             LatestNextGcdActionUpdatedAt,
             LatestNextActionId,
             GetActionName(LatestNextActionId),
+            nextActionRequirement,
             LatestNextActionUpdatedAt,
             NextActionEventsAvailable);
     }
@@ -140,5 +144,6 @@ internal sealed record RotationSolverNextActionInfo(
     DateTime NextGcdUpdatedAt,
     uint NextActionId,
     string NextActionName,
+    PositionalRequirement NextActionRequirement,
     DateTime NextActionUpdatedAt,
     bool EventsAvailable);

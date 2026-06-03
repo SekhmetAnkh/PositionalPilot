@@ -199,6 +199,60 @@ public sealed class PositionalGeometryTests
     }
 
     [Fact]
+    public void RsrNextGcdDrivesCommittedMovementForAnyMappedMeleeAction()
+    {
+        var now = DateTime.UtcNow;
+
+        var resolved = PositionalMovementRules.ResolveRsrMovementRequirement(
+            PositionalRequirement.Flank,
+            now,
+            PositionalRequirement.Rear,
+            now,
+            now,
+            1500,
+            out var source);
+
+        Assert.Equal(PositionalRequirement.Flank, resolved);
+        Assert.Equal("RSR next GCD", source);
+    }
+
+    [Fact]
+    public void RsrNextActionFallbackDrivesCommittedMovementWhenNextGcdIsUnknown()
+    {
+        var now = DateTime.UtcNow;
+
+        var resolved = PositionalMovementRules.ResolveRsrMovementRequirement(
+            PositionalRequirement.Unknown,
+            now,
+            PositionalRequirement.Flank,
+            now,
+            now,
+            1500,
+            out var source);
+
+        Assert.Equal(PositionalRequirement.Flank, resolved);
+        Assert.Equal("RSR next action", source);
+    }
+
+    [Fact]
+    public void StaleOrUnknownRsrDataFallsBackToRearFlankBorderHold()
+    {
+        var now = DateTime.UtcNow;
+
+        var resolved = PositionalMovementRules.ResolveRsrMovementRequirement(
+            PositionalRequirement.Flank,
+            now.AddSeconds(-5),
+            PositionalRequirement.Unknown,
+            now,
+            now,
+            1500,
+            out var source);
+
+        Assert.Equal(PositionalRequirement.Any, resolved);
+        Assert.Equal("nearest rear/flank border", source);
+    }
+
+    [Fact]
     public void AnyBorderHoldRemainsRearFlankOnly()
     {
         var settings = new PositionalPilotSettings();

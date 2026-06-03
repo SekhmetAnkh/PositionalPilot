@@ -146,6 +146,8 @@ public sealed class Plugin : IDalamudPlugin
         services.Chat.Print($"Target: {(snap.HasTarget ? snap.TargetName : "none")}, targetPositionals={positionals}, trueNorth={snap.TrueNorthAvailable}, positional={movement.CurrentPositional}, movement={movement.CurrentMovementPositional} ({movement.CurrentMovementMode}; {movement.CurrentMovementPositionalSource}), border={movement.CurrentBorderSide}, destination={movement.ChosenDestination?.ToString() ?? "none"}, block={movement.BlockReason}, cacheAge={cacheAge}");
         var next = movement.LastRotationSolverNextAction;
         var nextAge = next.NextGcdUpdatedAt == DateTime.MinValue ? "never" : $"{(DateTime.UtcNow - next.NextGcdUpdatedAt).TotalMilliseconds:F0}ms";
+        var nextActionAge = next.NextActionUpdatedAt == DateTime.MinValue ? "never" : $"{(DateTime.UtcNow - next.NextActionUpdatedAt).TotalMilliseconds:F0}ms";
         services.Chat.Print($"RSR next GCD: {next.NextGcdActionName} ({next.NextGcdActionId}), positional={next.NextGcdRequirement}, age={nextAge}, NoCasting={movement.LastNoCastingReason}");
+        services.Chat.Print($"RSR next action: {next.NextActionName} ({next.NextActionId}), positional={next.NextActionRequirement}, age={nextActionAge}");
     }
 }

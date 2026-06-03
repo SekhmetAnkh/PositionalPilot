@@ -40,8 +40,7 @@ internal sealed class BossModIpc : IpcAdapterBase
 
     public override void RefreshAvailability() =>
         SetAvailability(
-            "BossModReborn IPC providers not found",
-            () => recommended.HasFunction,
+            "BossModReborn safety IPC providers not found",
             () => isPositionSafe.HasFunction,
             () => isDashSafe.HasFunction);
 

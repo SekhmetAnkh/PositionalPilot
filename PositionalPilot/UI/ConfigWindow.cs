@@ -147,6 +147,11 @@ internal sealed class ConfigWindow
         ImGui.TextUnformatted($"RSR next GCD: {next.NextGcdActionName} ({next.NextGcdActionId})");
         ImGui.TextUnformatted($"RSR next positional: {next.NextGcdRequirement}");
         ImGui.TextUnformatted($"RSR next GCD age: {nextAge}");
+        var nextActionAge = next.NextActionUpdatedAt == DateTime.MinValue
+            ? "never"
+            : $"{(DateTime.UtcNow - next.NextActionUpdatedAt).TotalMilliseconds:F0}ms";
+        ImGui.TextUnformatted($"RSR next action positional: {next.NextActionRequirement}");
+        ImGui.TextUnformatted($"RSR next action age: {nextActionAge}");
         ImGui.TextUnformatted($"NoCasting: {controller.LastNoCastingReason}");
         if (config.Settings.DebugLogging)
         {

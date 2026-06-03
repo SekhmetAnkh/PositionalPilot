@@ -25,4 +25,29 @@ public static class PositionalMovementRules
         return currentNextGcdActionId != 0 && currentNextGcdActionId != previousNextGcdActionId;
     }
 
+    public static PositionalRequirement ResolveRsrMovementRequirement(
+        PositionalRequirement nextGcdRequirement,
+        DateTime nextGcdUpdatedAt,
+        PositionalRequirement nextActionRequirement,
+        DateTime nextActionUpdatedAt,
+        DateTime now,
+        int maxAgeMs,
+        out string source)
+    {
+        var maxAge = TimeSpan.FromMilliseconds(maxAgeMs);
+        if (now - nextGcdUpdatedAt <= maxAge && IsCommittedPositional(nextGcdRequirement))
+        {
+            source = "RSR next GCD";
+            return nextGcdRequirement;
+        }
+
+        if (now - nextActionUpdatedAt <= maxAge && IsCommittedPositional(nextActionRequirement))
+        {
+            source = "RSR next action";
+            return nextActionRequirement;
+        }
+
+        source = "nearest rear/flank border";
+        return PositionalRequirement.Any;
+    }
 }

@@ -1,14 +1,14 @@
 # PositionalPilot
 
-PositionalPilot is a Dalamud plugin scaffold for assistive melee positional movement in FFXIV. When explicitly enabled, it can suggest or request small movements around the rear/flank border of the current target, then commit deeper into Rear or Flank when a known positional is next.
+PositionalPilot is a Dalamud plugin scaffold for assistive melee positional movement in FFXIV. When explicitly enabled, it can suggest or request small movements around the rear/flank border of the current target, then commit deeper into Rear or Flank when RotationSolver indicates a known positional is next.
 
 The plugin is off by default. It has no stealth, hiding, anti-detection, ban-evasion, or ToS-bypass behavior.
 
 ## Dependencies
 
-- BossModReborn: required by default for recommended positional and safety checks.
+- BossModReborn: required by default for safety checks and AI/navigation priority.
 - vnavmesh: required by default for movement.
-- RotationSolverReborn / CombatReborn: optional by default; used only for narrow NoCasting coordination when its next-GCD event indicates a known positional action.
+- RotationSolverReborn / CombatReborn: optional by default; used as the positional intent source through cached next-action events and for narrow NoCasting coordination when enabled.
 - Avarice: optional/reference-only. Source inspection found `Avarice.CardinalDirection` but no rear/flank/range movement IPC, so PositionalPilot uses local geometry.
 
 ## Verified IPC
@@ -28,7 +28,7 @@ BossModReborn:
 - `BossMod.AI.NaviTargetPos` -> `Vector3?`
 - `BossMod.AI.PlayerSpeed` -> `float`
 
-BossMod positional enum mapping was verified as `Any=0`, `Flank=1`, `Rear=2`, `Front=3`. PositionalPilot treats `Front` as an explicit hard block: it will not choose or hold front itself, and will stand down so BossMod safety/AI can own movement if front is required.
+BossMod positional enum mapping was verified as `Any=0`, `Flank=1`, `Rear=2`, `Front=3`. PositionalPilot exposes this for diagnostics, but it does not use BossMod recommended positionals as movement intent. BossMod safety and AI/navigation still have priority: unsafe destinations are rejected and active BossMod navigation blocks ppilot movement.
 
 vnavmesh:
 
@@ -50,9 +50,9 @@ RotationSolverReborn:
 - `RotationSolverReborn.ChangeOperatingMode` -> `StateCommandType`
 - `RotationSolverReborn.ActionCommand` -> `string action, float time`
 
-No pull/query-style IPC for next action, next positional, current rotation state, GCD prediction, or target selection was found. PositionalPilot subscribes to the action-change events and caches the latest next GCD.
+No pull/query-style IPC for next action, next positional, current rotation state, GCD prediction, or target selection was found. PositionalPilot subscribes to the action-change events and caches the latest next GCD and next action.
 
-The local positional action map mirrors RotationSolverReborn's melee positional table for DRG, MNK, NIN, RPR, SAM, and VPR. Fresh known next-GCD positionals can drive movement toward that slice. Unknown action IDs never trigger NoCasting.
+The local positional action map mirrors RotationSolverReborn's melee positional table for DRG, MNK, NIN, RPR, SAM, and VPR. Fresh known next-GCD positionals drive movement first; if next GCD is unknown, a fresh known next-action event can drive movement for any mapped melee action. Unknown action IDs fall back to rear/flank border hold and never trigger NoCasting.
 
 Avarice:
 
@@ -102,14 +102,14 @@ The repository manifest points to the latest GitHub release asset named `latest.
 
 ## Known Limitations
 
-- Movement is intentionally gated on BossMod positional and safety IPC by default.
+- Movement is intentionally gated on BossMod safety IPC by default.
 - Movement uses a single destination per update and does not probe multiple vnavmesh paths.
 - `Any` uses loose rear/flank border holding only: the neutral anchors are calculated from the target's facing vectors and validated behind the target between rear and flank, never flank/front.
-- Fresh known RSR next-GCD positional changes can bypass the repath cooldown once, so it reacts faster without repeatedly querying vnavmesh.
-- BossMod `Front` recommendations are never converted into ppilot movement destinations. They block ppilot movement and show as `front blocked`.
+- Fresh known RSR next-GCD or next-action positional changes can bypass the repath cooldown once, so it reacts faster without repeatedly querying vnavmesh.
+- BossMod recommended positionals are not converted into ppilot movement destinations. If RSR does not provide a fresh known Rear/Flank action, ppilot holds the nearest rear/flank border.
 - Safety/dependency checks are cached briefly to avoid polling BossMod/vnavmesh every frame.
 - Targets whose `BNpcBase.IsOmnidirectional` flag is true are treated as not requiring positionals, so assist movement is blocked.
-- Fresh known RotationSolver next-GCD positionals can select the movement slice even when BossMod recommends `Any`, so PositionalPilot can pre-position instead of relying on True North.
+- Fresh known RotationSolver next-GCD or next-action positionals select the movement slice, so PositionalPilot can pre-position instead of relying on True North.
 - RotationSolver NoCasting coordination is off by default; enabling it may briefly request NoCasting only when the next cached RSR GCD is a known Rear/Flank positional, the player is not already in that slice, and True North is not available.
 - Avarice is not required because it does not expose the needed rear/flank/range IPC.
 - RotationSolverReborn is used for `NoCasting` coordination only; no next-positional query IPC was found, so event data can be stale or unavailable.
