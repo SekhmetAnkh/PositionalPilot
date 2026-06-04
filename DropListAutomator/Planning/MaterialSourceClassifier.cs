@@ -23,6 +23,9 @@ internal sealed class MaterialSourceClassifier(PluginServices services, DropLoca
         if (dropLocations.IsKnownDrop(itemId))
             return MaterialSourceKind.Drop;
 
+        if (fallbackDropItems!.Contains(itemId))
+            return MaterialSourceKind.Drop;
+
         if (craftables!.Contains(itemId))
             return MaterialSourceKind.Craftable;
 

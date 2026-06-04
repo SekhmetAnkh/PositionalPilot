@@ -18,7 +18,6 @@ internal sealed class DropHuntListManager(DropLocationProvider dropLocations)
         items.AddRange(requirements
             .Where(req => req.SourceKind == MaterialSourceKind.Drop && req.Missing > 0)
             .Select(req => new DropHuntListItem(req.ItemId, req.Name, req.Needed, req.Owned, dropLocations.GetDropInfo(req.ItemId), req.RecipeId))
-            .Where(item => item.DropInfo.HasData)
             .OrderBy(item => item.ItemName, StringComparer.OrdinalIgnoreCase));
 
         Name = string.IsNullOrWhiteSpace(listName) ? "Vulcan Drop Hunt (Auto-Generated)" : listName.Trim();
