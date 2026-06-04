@@ -18,6 +18,7 @@ public sealed class PositionalPilotSettings
     public float PositionalCommitDeadzoneYalms = 0.35f;
     public float DestinationChangeThresholdYalms = 1.0f;
     public float StopWithinYalms = 0.35f;
+    public CombatIntentSource CombatIntentSource = CombatIntentSource.RotationSolverReborn;
     public bool EnableRotationSolverCoordination = false;
     public int RsrNextActionMaxAgeMs = 1500;
     public int NoCastingCooldownMs = 1500;

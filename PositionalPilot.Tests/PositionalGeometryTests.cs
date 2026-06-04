@@ -69,6 +69,28 @@ public sealed class PositionalGeometryTests
         Assert.False(PositionalActionMap.TryGetRequirement(999999, out _));
     }
 
+    [Theory]
+    [InlineData(7478, PositionalRequirement.Rear)] // SAM Jinpu -> Gekko
+    [InlineData(7479, PositionalRequirement.Flank)] // SAM Shifu -> Kasha
+    [InlineData(24382, PositionalRequirement.Rear)] // RPR Gibbet -> Gallows
+    [InlineData(24383, PositionalRequirement.Flank)] // RPR Gallows -> Gibbet
+    [InlineData(34621, PositionalRequirement.Rear)] // VPR Hunter's Coil -> Swiftskin's Coil
+    [InlineData(34622, PositionalRequirement.Flank)] // VPR Swiftskin's Coil -> Hunter's Coil
+    public void WrathComboLastGcdInferenceCoversKnownTransitions(uint actionId, PositionalRequirement expected)
+    {
+        Assert.True(PositionalActionInference.TryInferWrathNextRequirement(actionId, out var requirement));
+        Assert.Equal(expected, requirement);
+    }
+
+    [Fact]
+    public void WrathComboInferenceFailsClosedForUnknownActions()
+    {
+        Assert.False(PositionalActionInference.TryInferWrathNextRequirement(61, out _)); // MNK Twin Snakes can branch.
+        Assert.False(PositionalActionInference.TryInferWrathNextRequirement(54, out _)); // MNK True Strike can branch by Coeurl stacks.
+        Assert.False(PositionalActionInference.TryInferWrathNextRequirement(34608, out _)); // VPR Hunter's Sting needs venom state.
+        Assert.False(PositionalActionInference.TryInferWrathNextRequirement(999999, out _));
+    }
+
     [Fact]
     public void FrontIsNeverTreatedAsAValidDestinationButCanTriggerEscape()
     {

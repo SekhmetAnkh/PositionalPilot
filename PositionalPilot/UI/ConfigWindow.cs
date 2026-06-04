@@ -10,15 +10,17 @@ internal sealed class ConfigWindow
     private readonly Configuration config;
     private readonly BossModIpc bossMod;
     private readonly RotationSolverIpc rotationSolver;
+    private readonly WrathComboIpc wrathCombo;
     private readonly VnavmeshIpc vnavmesh;
     private readonly AvariceIpc avarice;
     private readonly MovementController controller;
 
-    public ConfigWindow(Configuration config, BossModIpc bossMod, RotationSolverIpc rotationSolver, VnavmeshIpc vnavmesh, AvariceIpc avarice, MovementController controller)
+    public ConfigWindow(Configuration config, BossModIpc bossMod, RotationSolverIpc rotationSolver, WrathComboIpc wrathCombo, VnavmeshIpc vnavmesh, AvariceIpc avarice, MovementController controller)
     {
         this.config = config;
         this.bossMod = bossMod;
         this.rotationSolver = rotationSolver;
+        this.wrathCombo = wrathCombo;
         this.vnavmesh = vnavmesh;
         this.avarice = avarice;
         this.controller = controller;
@@ -46,7 +48,7 @@ internal sealed class ConfigWindow
             DrawTab("Status", DrawStatus);
             DrawTab("Safety", DrawSafety);
             DrawTab("Movement", DrawMovement);
-            DrawTab("RotationSolver", DrawRotationSolver);
+            DrawTab("Combat Source", DrawCombatSource);
             DrawTab("Debug", DrawDebug);
             ImGui.EndTabBar();
         }
@@ -138,6 +140,8 @@ internal sealed class ConfigWindow
         DrawDependency("BossModReborn", bossMod.Available, bossMod.LastError, "Used as the safety authority for destination and route checks.");
         DrawDependency("RotationSolverReborn", rotationSolver.Available, rotationSolver.LastError, "Used for RSR next-action events and optional NoCasting coordination.");
         DrawDependency("RSR next-action events", rotationSolver.NextActionEventsAvailable, rotationSolver.EventLastError, "Required for PositionalPilot to know which Rear/Flank action is coming next.");
+        DrawDependency("WrathCombo", wrathCombo.Available, wrathCombo.LastError, "Optional combat intent source. Wrath does not expose next-position IPC, so PositionalPilot infers only known transitions.");
+        DrawDependency("WrathCombo action events", wrathCombo.ActionEventsAvailable, wrathCombo.EventLastError, "Required for Wrath last-GCD inference. If unavailable, Wrath source falls back to border hold.");
         DrawDependency("vnavmesh", vnavmesh.Available, vnavmesh.LastError, "Used to issue the actual movement request.");
         DrawDependency("Avarice", avarice.Available, avarice.LastError ?? "optional; only CardinalDirection IPC found", "Reference-only status. PositionalPilot does not depend on Avarice for movement.");
 
@@ -148,6 +152,7 @@ internal sealed class ConfigWindow
         DrawStatusRow("Target targeting player", targetTargetsPlayer, "Confirmed yes blocks assist movement to avoid chasing a target that is tracking you.");
         DrawStatusRow("Target hitbox", $"{s.TargetHitboxRadius:F2}", "Used with Distance from hitbox to choose the destination ring.");
         DrawStatusRow("BossMod positional", controller.CurrentPositional.ToString(), "Diagnostic only. Movement intent comes from RSR or rear/flank border hold.");
+        DrawStatusRow("Combat intent source", config.Settings.CombatIntentSource.ToString(), "Selected source for committed Rear/Flank movement.");
         DrawStatusRow("Movement positional", controller.CurrentMovementPositional.ToString(), "The current movement intent: Any border hold, or committed Rear/Flank.");
         DrawStatusRow("Movement mode", controller.CurrentMovementMode, "Human-readable movement intent mode.");
         DrawStatusRow("Movement source", controller.CurrentMovementPositionalSource, "Why this movement intent was selected.");
@@ -163,6 +168,10 @@ internal sealed class ConfigWindow
         DrawStatusRow("RSR next action positional", next.NextActionRequirement.ToString(), "Fallback mapped positional when next GCD is unknown or stale.");
         DrawStatusRow("RSR next action age", FormatAge(next.NextActionUpdatedAt), "Fresh fallback values can also drive committed Rear/Flank movement.");
         DrawStatusRow("NoCasting", controller.LastNoCastingReason, "Most recent RotationSolver NoCasting decision.");
+        var wrath = controller.LastWrathComboNextAction;
+        DrawStatusRow("Wrath last GCD", $"{wrath.LastGcdActionName} ({wrath.LastGcdActionId})", "Latest action observed from WrathCombo's OnActionUsed IPC.");
+        DrawStatusRow("Wrath inferred next", wrath.InferredNextRequirement.ToString(), "Conservative next positional inferred from known Wrath transitions.");
+        DrawStatusRow("Wrath last GCD age", FormatAge(wrath.LastGcdUpdatedAt), "Fresh inferred values can drive committed movement when WrathCombo is selected.");
     }
 
     private void DrawSafety()
@@ -178,7 +187,7 @@ internal sealed class ConfigWindow
             RequiredDependencies.RequireVnavmesh);
         DrawDependencyFlag(
             "Require combat solver",
-            "Default off. Blocks movement when RotationSolverReborn/CombatReborn coordination IPC is unavailable.",
+            "Default off. Blocks movement when the selected combat intent source is unavailable.",
             RequiredDependencies.RequireCombatSolver);
 
         ImGui.Separator();
@@ -215,11 +224,19 @@ internal sealed class ConfigWindow
         DrawFloatSetting("Stop within yalms", "Distance considered close enough to stop movement.", ref config.Settings.StopWithinYalms, 0.05f, 0.05f, 3f);
     }
 
-    private void DrawRotationSolver()
+    private void DrawCombatSource()
     {
+        var source = (int)config.Settings.CombatIntentSource;
+        if (ImGui.Combo("Combat intent source", ref source, "RotationSolverReborn\0WrathCombo\0"))
+        {
+            config.Settings.CombatIntentSource = (CombatIntentSource)source;
+            config.Save();
+        }
+        DrawTooltip("RotationSolver uses next-action events. WrathCombo uses conservative last-GCD inference because Wrath does not expose next-positional prediction IPC.");
+
         DrawCheckboxSetting(
             "Coordinate with RotationSolver",
-            "Default off. When enabled, PositionalPilot may briefly request NoCasting only for a known next positional when you are outside the required slice and True North is unavailable.",
+            "Default off. Only applies when RotationSolverReborn is selected; WrathCombo has no NoCasting IPC.",
             value => config.Settings.EnableRotationSolverCoordination = value,
             config.Settings.EnableRotationSolverCoordination);
         DrawIntSetting("RSR next action max age ms", "Maximum age for cached RSR next-GCD or next-action data before it is ignored.", ref config.Settings.RsrNextActionMaxAgeMs, 25, 250, 5000);
@@ -233,6 +250,14 @@ internal sealed class ConfigWindow
         DrawStatusRow("Next action", $"{next.NextActionName} ({next.NextActionId})", "Diagnostic/fallback RSR next action.");
         DrawStatusRow("Next action positional", next.NextActionRequirement.ToString(), "Mapped positional for the fallback next action.");
         DrawStatusRow("NoCasting", controller.LastNoCastingReason, "The last reason NoCasting did or did not trigger.");
+
+        ImGui.Separator();
+        var wrath = controller.LastWrathComboNextAction;
+        DrawStatusRow("Wrath auto-rotation", FormatOptionalBool(wrathCombo.AutoRotationEnabled), "WrathCombo auto-rotation state when exposed by IPC.");
+        DrawStatusRow("Wrath current job ready", FormatOptionalBool(wrathCombo.CurrentJobReady), "Whether Wrath reports the current job is configured for auto-rotation.");
+        DrawStatusRow("Wrath last GCD", $"{wrath.LastGcdActionName} ({wrath.LastGcdActionId})", "Latest action observed from WrathCombo's OnActionUsed IPC.");
+        DrawStatusRow("Wrath inferred next", wrath.InferredNextRequirement.ToString(), "Only explicit known transitions infer a committed positional; unknown transitions fall back to border hold.");
+        DrawStatusRow("Wrath event status", wrath.EventsAvailable ? "available" : "missing/error", "Wrath inference requires OnActionUsed events.");
     }
 
     private void DrawDebug()
@@ -245,6 +270,8 @@ internal sealed class ConfigWindow
         DrawStatusRow("BossMod error", bossMod.LastError ?? "ok", "Raw BossMod IPC availability or call error.");
         DrawStatusRow("RotationSolver error", rotationSolver.LastError ?? "ok", "Raw RotationSolver coordination IPC availability or call error.");
         DrawStatusRow("RSR event error", rotationSolver.EventLastError ?? "ok", "Raw RSR next-action event subscription error.");
+        DrawStatusRow("WrathCombo error", wrathCombo.LastError ?? "ok", "Raw WrathCombo IPC availability or call error.");
+        DrawStatusRow("WrathCombo event error", wrathCombo.EventLastError ?? "ok", "Raw WrathCombo OnActionUsed event subscription error.");
         DrawStatusRow("vnavmesh error", vnavmesh.LastError ?? "ok", "Raw vnavmesh IPC availability or call error.");
         DrawStatusRow("Avarice status", avarice.LastError ?? "optional; local geometry active", "Avarice is optional/reference-only. PositionalPilot uses local rear/flank geometry.");
         DrawStatusRow("Safety cache age", FormatAge(controller.LastCachedSafety.UpdatedAt), "Age of cached dependency/safety values.");
@@ -255,6 +282,7 @@ internal sealed class ConfigWindow
     {
         bossMod.RefreshAvailability();
         rotationSolver.RefreshAvailability();
+        wrathCombo.RefreshAvailability();
         vnavmesh.RefreshAvailability();
         avarice.RefreshAvailability();
     }
@@ -318,4 +346,11 @@ internal sealed class ConfigWindow
 
     private static string FormatAge(DateTime timestamp) =>
         timestamp == DateTime.MinValue ? "never" : $"{(DateTime.UtcNow - timestamp).TotalMilliseconds:F0}ms";
+
+    private static string FormatOptionalBool(bool? value) => value switch
+    {
+        true => "yes",
+        false => "no",
+        _ => "unknown",
+    };
 }

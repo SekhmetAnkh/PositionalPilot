@@ -17,6 +17,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ThrottledLogger logger;
     private readonly BossModIpc bossMod;
     private readonly RotationSolverIpc rotationSolver;
+    private readonly WrathComboIpc wrathCombo;
     private readonly VnavmeshIpc vnavmesh;
     private readonly AvariceIpc avarice;
     private readonly GameStateReader gameState;
@@ -41,11 +42,12 @@ public sealed class Plugin : IDalamudPlugin
         logger = new ThrottledLogger(services);
         bossMod = new BossModIpc(services, logger);
         rotationSolver = new RotationSolverIpc(services, logger);
+        wrathCombo = new WrathComboIpc(services, logger);
         vnavmesh = new VnavmeshIpc(services, logger);
         avarice = new AvariceIpc(services, logger);
         gameState = new GameStateReader(services);
-        movement = new MovementController(config, gameState, bossMod, vnavmesh, rotationSolver, logger);
-        window = new ConfigWindow(config, bossMod, rotationSolver, vnavmesh, avarice, movement);
+        movement = new MovementController(config, gameState, bossMod, vnavmesh, rotationSolver, wrathCombo, logger);
+        window = new ConfigWindow(config, bossMod, rotationSolver, wrathCombo, vnavmesh, avarice, movement);
 
         services.Commands.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
@@ -64,6 +66,7 @@ public sealed class Plugin : IDalamudPlugin
         services.PluginInterface.UiBuilder.OpenConfigUi -= OpenConfig;
         services.Commands.RemoveHandler(CommandName);
         rotationSolver.Dispose();
+        wrathCombo.Dispose();
     }
 
     private void OnFrameworkUpdate(IFramework framework) => movement.Update();
@@ -128,6 +131,7 @@ public sealed class Plugin : IDalamudPlugin
         movement.RefreshDependencyStatus(true);
         bossMod.RefreshAvailability();
         rotationSolver.RefreshAvailability();
+        wrathCombo.RefreshAvailability();
         vnavmesh.RefreshAvailability();
         avarice.RefreshAvailability();
 
@@ -142,7 +146,7 @@ public sealed class Plugin : IDalamudPlugin
             ? "never"
             : $"{(DateTime.UtcNow - movement.LastCachedSafety.UpdatedAt).TotalMilliseconds:F0}ms";
         services.Chat.Print($"PositionalPilot: enabled={config.Settings.Enabled}, mode={config.Settings.MovementMode}, state={movement.State}");
-        services.Chat.Print($"Deps: BossMod={bossMod.Available} ({bossMod.LastError ?? "ok"}), RSR={rotationSolver.Available} ({rotationSolver.LastError ?? "ok"}), RSRNext={rotationSolver.NextActionEventsAvailable} ({rotationSolver.EventLastError ?? "ok"}), vnavmesh={vnavmesh.Available} ({vnavmesh.LastError ?? "ok"}), Avarice={avarice.Available} ({avarice.LastError ?? "optional"})");
+        services.Chat.Print($"Deps: BossMod={bossMod.Available} ({bossMod.LastError ?? "ok"}), RSR={rotationSolver.Available} ({rotationSolver.LastError ?? "ok"}), RSRNext={rotationSolver.NextActionEventsAvailable} ({rotationSolver.EventLastError ?? "ok"}), Wrath={wrathCombo.Available} ({wrathCombo.LastError ?? "ok"}), WrathEvents={wrathCombo.ActionEventsAvailable} ({wrathCombo.EventLastError ?? "ok"}), vnavmesh={vnavmesh.Available} ({vnavmesh.LastError ?? "ok"}), Avarice={avarice.Available} ({avarice.LastError ?? "optional"})");
         var targetTargetsPlayer = snap.TargetTargetsPlayer switch { true => "yes", false => "no", _ => "unknown" };
         services.Chat.Print($"Target: {(snap.HasTarget ? snap.TargetName : "none")}, targetPositionals={positionals}, targetTargetsPlayer={targetTargetsPlayer}, trueNorth={snap.TrueNorthAvailable}, positional={movement.CurrentPositional}, movement={movement.CurrentMovementPositional} ({movement.CurrentMovementMode}; {movement.CurrentMovementPositionalSource}), border={movement.CurrentBorderSide}, destination={movement.ChosenDestination?.ToString() ?? "none"}, block={movement.BlockReason}, cacheAge={cacheAge}");
         var next = movement.LastRotationSolverNextAction;
@@ -150,5 +154,8 @@ public sealed class Plugin : IDalamudPlugin
         var nextActionAge = next.NextActionUpdatedAt == DateTime.MinValue ? "never" : $"{(DateTime.UtcNow - next.NextActionUpdatedAt).TotalMilliseconds:F0}ms";
         services.Chat.Print($"RSR next GCD: {next.NextGcdActionName} ({next.NextGcdActionId}), positional={next.NextGcdRequirement}, age={nextAge}, NoCasting={movement.LastNoCastingReason}");
         services.Chat.Print($"RSR next action: {next.NextActionName} ({next.NextActionId}), positional={next.NextActionRequirement}, age={nextActionAge}");
+        var wrath = movement.LastWrathComboNextAction;
+        var wrathAge = wrath.LastGcdUpdatedAt == DateTime.MinValue ? "never" : $"{(DateTime.UtcNow - wrath.LastGcdUpdatedAt).TotalMilliseconds:F0}ms";
+        services.Chat.Print($"WrathCombo last GCD: {wrath.LastGcdActionName} ({wrath.LastGcdActionId}), inferredNext={wrath.InferredNextRequirement}, age={wrathAge}, source={config.Settings.CombatIntentSource}");
     }
 }

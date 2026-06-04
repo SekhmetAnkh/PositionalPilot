@@ -13,6 +13,7 @@ internal sealed class MovementController
     private readonly BossModIpc bossMod;
     private readonly VnavmeshIpc vnavmesh;
     private readonly RotationSolverIpc rotationSolver;
+    private readonly WrathComboIpc wrathCombo;
     private readonly SafetyGate safety;
     private readonly ThrottledLogger logger;
 
@@ -31,13 +32,14 @@ internal sealed class MovementController
     private uint lastMovementActionId;
     private uint currentMovementActionId;
 
-    public MovementController(Configuration config, GameStateReader game, BossModIpc bossMod, VnavmeshIpc vnavmesh, RotationSolverIpc rotationSolver, ThrottledLogger logger)
+    public MovementController(Configuration config, GameStateReader game, BossModIpc bossMod, VnavmeshIpc vnavmesh, RotationSolverIpc rotationSolver, WrathComboIpc wrathCombo, ThrottledLogger logger)
     {
         this.config = config;
         this.game = game;
         this.bossMod = bossMod;
         this.vnavmesh = vnavmesh;
         this.rotationSolver = rotationSolver;
+        this.wrathCombo = wrathCombo;
         this.logger = logger;
         safety = new SafetyGate(config, bossMod);
     }
@@ -53,6 +55,7 @@ internal sealed class MovementController
     public string CurrentMovementPositionalSource { get; private set; } = "not evaluated";
     public string CurrentMovementMode => PositionalMovementRules.MovementModeName(CurrentMovementPositional);
     public RotationSolverNextActionInfo LastRotationSolverNextAction => rotationSolver.GetNextGcdActionInfo();
+    public WrathComboNextActionInfo LastWrathComboNextAction => wrathCombo.GetInferredNextActionInfo();
     public GameSnapshot LastSnapshot { get; private set; } = new(false, default, 0, 0, false, false, false, false, 0, string.Empty, 0, 0, default, 0, 0, null, false, false, false, false);
 
     public void Update()
@@ -106,8 +109,7 @@ internal sealed class MovementController
         }
 
         CurrentPositional = cachedSafety.Positional;
-        var nextAction = rotationSolver.GetNextGcdActionInfo();
-        var movementPositional = ResolveMovementPositional(nextAction);
+        var movementPositional = ResolveMovementPositional();
         var frontEscape = PositionalMovementRules.CanFrontEscape(IsPlayerCurrentlyInFront(LastSnapshot), LastSnapshot.TargetTargetsPlayer);
         if (frontEscape && !PositionalMovementRules.IsCommittedPositional(movementPositional))
             CurrentMovementPositionalSource = "front escape to rear/flank border";
@@ -220,6 +222,7 @@ internal sealed class MovementController
         bossMod.RefreshAvailability();
         vnavmesh.RefreshAvailability();
         rotationSolver.RefreshAvailability();
+        wrathCombo.RefreshAvailability();
         nextDependencyRefresh = DateTime.UtcNow.AddMilliseconds(config.Settings.DependencyRefreshMs);
     }
 
@@ -326,7 +329,7 @@ internal sealed class MovementController
             vnavmesh.IsNavigating(),
             bossMod.IsBossModNavigating(),
             bossMod.TryGetBossModNaviTarget(out _),
-            rotationSolver.Available,
+            IsSelectedCombatIntentAvailable(),
             hasPositional,
             positional,
             nextDamage,
@@ -349,12 +352,16 @@ internal sealed class MovementController
         lastMovementActionId = currentMovementActionId;
     }
 
-    private PositionalRequirement ResolveMovementPositional(RotationSolverNextActionInfo next)
+    private PositionalRequirement ResolveMovementPositional()
     {
         CurrentMovementPositional = PositionalRequirement.Any;
         CurrentMovementPositionalSource = "nearest rear/flank border";
         currentMovementActionId = 0;
 
+        if (config.Settings.CombatIntentSource == CombatIntentSource.WrathCombo)
+            return ResolveWrathComboMovementPositional();
+
+        var next = rotationSolver.GetNextGcdActionInfo();
         if (!next.EventsAvailable)
             return PositionalRequirement.Any;
 
@@ -381,6 +388,33 @@ internal sealed class MovementController
             _ => 0,
         };
         return resolved;
+    }
+
+    private PositionalRequirement ResolveWrathComboMovementPositional()
+    {
+        var next = wrathCombo.GetInferredNextActionInfo();
+        if (!next.EventsAvailable)
+        {
+            CurrentMovementPositionalSource = "WrathCombo action event unavailable";
+            return PositionalRequirement.Any;
+        }
+
+        if (DateTime.UtcNow - next.LastGcdUpdatedAt > TimeSpan.FromMilliseconds(config.Settings.RsrNextActionMaxAgeMs))
+        {
+            CurrentMovementPositionalSource = "WrathCombo inference stale";
+            return PositionalRequirement.Any;
+        }
+
+        if (!PositionalMovementRules.IsCommittedPositional(next.InferredNextRequirement))
+        {
+            CurrentMovementPositionalSource = $"WrathCombo cannot infer after {next.LastGcdActionName}";
+            return PositionalRequirement.Any;
+        }
+
+        CurrentMovementPositional = next.InferredNextRequirement;
+        CurrentMovementPositionalSource = $"WrathCombo inferred after {next.LastGcdActionName}";
+        currentMovementActionId = next.LastGcdActionId;
+        return next.InferredNextRequirement;
     }
 
     private static bool IsPlayerCurrentlyInFront(GameSnapshot snapshot)
@@ -411,6 +445,8 @@ internal sealed class MovementController
         duration = 0;
         if (!config.Settings.EnableRotationSolverCoordination)
             return "coordination disabled";
+        if (config.Settings.CombatIntentSource != CombatIntentSource.RotationSolverReborn)
+            return "NoCasting only supports RotationSolver source";
         if (!rotationSolver.Available)
             return "RotationSolver unavailable";
         if (!rotationSolver.NextActionEventsAvailable)
@@ -447,6 +483,11 @@ internal sealed class MovementController
         duration = Math.Clamp(config.Settings.NoCastingDurationSeconds, 0.1f, 2.0f);
         return "triggered";
     }
+
+    private bool IsSelectedCombatIntentAvailable() =>
+        config.Settings.CombatIntentSource == CombatIntentSource.WrathCombo
+            ? wrathCombo.Available
+            : rotationSolver.Available;
 
     private static bool IsDestinationInRequestedSlice(TargetSnapshot target, BorderDestination destination)
     {

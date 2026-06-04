@@ -41,7 +41,7 @@ internal sealed class SafetyGate
         if (s.RequiredDependencies.HasFlag(RequiredDependencies.RequireBossModSafety) && !bossMod.Available)
             return Block("BossMod safety unavailable", out reason);
         if (s.RequiredDependencies.HasFlag(RequiredDependencies.RequireCombatSolver) && !safety.RotationSolverAvailable)
-            return Block("RotationSolverReborn unavailable", out reason);
+            return Block("selected combat intent source unavailable", out reason);
         if (s.DisableDuringCasting && snapshot.IsCasting)
             return Block("player is casting", out reason);
         if (s.DisableDuringUpcomingDamage && safety.NextDamageIn is { } damage && damage <= s.UpcomingDamageBlockSeconds)
