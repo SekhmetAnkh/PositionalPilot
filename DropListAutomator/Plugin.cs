@@ -38,10 +38,12 @@ public sealed class Plugin : IDalamudPlugin
         var vnavmesh = new VnavmeshIpc(services, logger);
         var rotationSolver = new RotationSolverRebornIpc(services, logger);
         var commandBridge = new CommandBridge(services);
-        var planner = new MaterialPlanner(services);
+        var dropLocations = new DropLocationProvider(services);
+        var planner = new MaterialPlanner(services, dropLocations);
+        var dropHuntList = new DropHuntListManager(dropLocations);
         var monsterRoutePlanner = new MonsterRoutePlanner(services);
         var monsterNavigator = new MonsterNavigator(services, config, lifestream, vnavmesh, rotationSolver, commandBridge, monsterRoutePlanner);
-        window = new MainWindow(config, gbr, lifestream, vnavmesh, rotationSolver, monsterNavigator, commandBridge, planner);
+        window = new MainWindow(config, gbr, lifestream, vnavmesh, rotationSolver, monsterNavigator, commandBridge, planner, dropHuntList);
 
         commands.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
@@ -94,8 +96,28 @@ public sealed class Plugin : IDalamudPlugin
                 window.StopAutomation();
                 services.Chat.Print("DropListAutomator: stopped navigation and dependency automation.");
                 break;
+            case "hunt":
+                window.GenerateDropHuntList();
+                services.Chat.Print(window.DropHuntStatusLine());
+                break;
+            case "hunt next":
+                window.StartActiveDropHuntTarget();
+                services.Chat.Print(window.DropHuntStatusLine());
+                break;
             default:
-                services.Chat.Print("Usage: /dropauto [open|status|stop|gbr on|gbr off]");
+                if (arg.StartsWith("vulcan ", StringComparison.Ordinal))
+                {
+                    var request = args.Trim()[7..].Trim();
+                    if (request.Length > 0)
+                    {
+                        window.PlanText(request);
+                        window.GenerateDropHuntList();
+                        services.Chat.Print(window.DropHuntStatusLine());
+                        break;
+                    }
+                }
+
+                services.Chat.Print("Usage: /dropauto [open|status|stop|hunt|hunt next|gbr on|gbr off|vulcan <item> x<qty>]");
                 break;
         }
     }

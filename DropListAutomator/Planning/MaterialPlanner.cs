@@ -3,8 +3,10 @@ using Lumina.Excel.Sheets;
 
 namespace DropListAutomator.Planning;
 
-internal sealed class MaterialPlanner(PluginServices services)
+internal sealed class MaterialPlanner(PluginServices services, DropLocationProvider dropLocations)
 {
+    private readonly MaterialSourceClassifier sourceClassifier = new(services, dropLocations);
+
     public IReadOnlyList<MaterialRequirement> Plan(string input)
     {
         var requests = ParseRequests(input);
@@ -13,11 +15,6 @@ internal sealed class MaterialPlanner(PluginServices services)
 
         var items = services.Data.GetExcelSheet<Item>();
         var recipes = services.Data.GetExcelSheet<Recipe>();
-        var gatherables = services.Data.GetExcelSheet<GatheringItem>()
-            .Where(row => row.Item.RowId != 0)
-            .Select(row => row.Item.RowId)
-            .ToHashSet();
-
         var itemByName = items
             .Where(item => item.RowId != 0 && !item.Name.IsEmpty)
             .GroupBy(item => Normalize(item.Name.ExtractText()))
@@ -42,12 +39,12 @@ internal sealed class MaterialPlanner(PluginServices services)
             {
                 var item = items.GetRow(pair.Key);
                 var name = item.Name.ExtractText();
-                var owned = 0;
-                var source = Classify(pair.Key, gatherables, recipeByResult);
+                var owned = InventoryCounter.Count(pair.Key);
+                var source = sourceClassifier.Classify(pair.Key);
                 var recipeId = recipeByResult.TryGetValue(pair.Key, out var recipe) ? recipe.RowId : (uint?)null;
                 return new MaterialRequirement(pair.Key, name, pair.Value, owned, source, recipeId);
             })
-            .OrderByDescending(req => req.SourceKind == MaterialSourceKind.LikelyDropOnly)
+            .OrderByDescending(req => req.SourceKind == MaterialSourceKind.Drop)
             .ThenBy(req => req.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -82,20 +79,6 @@ internal sealed class MaterialPlanner(PluginServices services)
 
         if (!hadIngredient)
             output[itemId] = GetExisting(output, itemId) + quantity;
-    }
-
-    private static MaterialSourceKind Classify(
-        uint itemId,
-        IReadOnlySet<uint> gatherables,
-        IReadOnlyDictionary<uint, Recipe> recipeByResult)
-    {
-        if (gatherables.Contains(itemId))
-            return MaterialSourceKind.Gatherable;
-
-        if (recipeByResult.ContainsKey(itemId))
-            return MaterialSourceKind.Craftable;
-
-        return MaterialSourceKind.LikelyDropOnly;
     }
 
     private static List<(string Name, int Quantity)> ParseRequests(string input)

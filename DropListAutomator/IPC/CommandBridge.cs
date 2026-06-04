@@ -14,15 +14,6 @@ internal sealed partial class CommandBridge(PluginServices services)
         services.Commands.ProcessCommand(string.Format(template, safe));
     }
 
-    public void OpenMonsterLootHunter(string itemName)
-    {
-        var safe = Sanitize(itemName);
-        if (safe.Length == 0)
-            return;
-
-        services.Commands.ProcessCommand($"/mloot {safe}");
-    }
-
     public void StartVulcanCraft(string itemName, int quantity)
     {
         var safe = Sanitize(itemName);

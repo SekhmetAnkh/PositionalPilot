@@ -15,6 +15,7 @@ internal sealed class MainWindow
     private readonly MonsterNavigator monsterNavigator;
     private readonly CommandBridge commands;
     private readonly MaterialPlanner planner;
+    private readonly DropHuntListManager dropHuntList;
     private IReadOnlyList<MaterialRequirement> requirements = [];
     private string targetText;
 
@@ -26,7 +27,8 @@ internal sealed class MainWindow
         RotationSolverRebornIpc rotationSolver,
         MonsterNavigator monsterNavigator,
         CommandBridge commands,
-        MaterialPlanner planner)
+        MaterialPlanner planner,
+        DropHuntListManager dropHuntList)
     {
         this.config = config;
         this.gbr = gbr;
@@ -36,6 +38,7 @@ internal sealed class MainWindow
         this.monsterNavigator = monsterNavigator;
         this.commands = commands;
         this.planner = planner;
+        this.dropHuntList = dropHuntList;
         targetText = config.LastTargetText;
     }
 
@@ -43,11 +46,16 @@ internal sealed class MainWindow
 
     public void Dispose() => rotationSolver.Dispose();
 
-    public void Update() => monsterNavigator.Update();
+    public void Update()
+    {
+        monsterNavigator.Update();
+        dropHuntList.Refresh();
+    }
 
     public void StopAutomation()
     {
         monsterNavigator.Stop();
+        dropHuntList.Stop();
         gbr.SetAutoGatherEnabled(false);
     }
 
@@ -61,6 +69,32 @@ internal sealed class MainWindow
 
     public string BuildStatusLine() =>
         $"DropListAutomator: GBR={gbr.Available} ({gbr.LastError ?? gbr.GetStatus()}), Lifestream={lifestream.Available} ({lifestream.LastError ?? "ok"}), vnavmesh={vnavmesh.Available} ({vnavmesh.LastError ?? "ok"}), RSR={rotationSolver.Available} ({rotationSolver.LastError ?? "ok"}), MonsterNav={monsterNavigator.State} ({monsterNavigator.StatusText})";
+
+    public string DropHuntStatusLine() =>
+        $"DropListAutomator: {dropHuntList.Name}: {dropHuntList.StatusText}";
+
+    public void PlanText(string text)
+    {
+        targetText = text;
+        config.LastTargetText = targetText;
+        config.Save();
+        requirements = planner.Plan(targetText);
+    }
+
+    public void GenerateDropHuntList()
+    {
+        if (requirements.Count == 0 && !string.IsNullOrWhiteSpace(targetText))
+            requirements = planner.Plan(targetText);
+
+        dropHuntList.Generate(requirements);
+    }
+
+    public void StartActiveDropHuntTarget()
+    {
+        dropHuntList.Refresh();
+        if (dropHuntList.ActiveItem?.GetBestLocation() is { } location)
+            monsterNavigator.Start(location);
+    }
 
     public void Draw()
     {
@@ -83,6 +117,8 @@ internal sealed class MainWindow
         DrawDependencyStatus();
         ImGui.Separator();
         DrawResults();
+        ImGui.Separator();
+        DrawDropHuntList();
         ImGui.End();
     }
 
@@ -92,19 +128,11 @@ internal sealed class MainWindow
         ImGui.InputTextMultiline("##targets", ref targetText, 4096, new Vector2(-1, 92));
 
         if (ImGui.Button("Plan"))
-        {
-            config.LastTargetText = targetText;
-            config.Save();
-            requirements = planner.Plan(targetText);
-        }
+            PlanText(targetText);
 
         ImGui.SameLine();
-        var autoOpenMlh = config.AutoOpenMonsterLootHunter;
-        if (ImGui.Checkbox("Open MLH for drop-only items", ref autoOpenMlh))
-        {
-            config.AutoOpenMonsterLootHunter = autoOpenMlh;
-            config.Save();
-        }
+        if (ImGui.Button("Generate Drop Hunt List"))
+            GenerateDropHuntList();
 
         ImGui.SameLine();
         var preferVulcan = config.PreferVulcanCraftCommand;
@@ -131,7 +159,8 @@ internal sealed class MainWindow
             ? $"events={rotationSolver.NextActionEventsAvailable}, next={rotationSolver.LatestNextGcdActionName}/{rotationSolver.LatestNextActionName}"
             : rotationSolver.LastError);
         DrawStatus("Monster nav", monsterNavigator.State != MonsterNavigationState.Failed, monsterNavigator.StatusText);
-        ImGui.TextUnformatted("MLH bridge: command-only (/mloot). Vulcan bridge: command-only (/vulcan craft). Monster routes follow GBR's teleport-wait-vnavmesh pattern.");
+        DrawStatus("Drop hunt list", dropHuntList.Enabled, dropHuntList.StatusText);
+        ImGui.TextUnformatted("Vulcan bridge: command-only (/vulcan craft). Drop hunt lists are plugin-scoped temporary lists built from GBR-style drop location data.");
 
         if (ImGui.SmallButton("Abort Teleport"))
             lifestream.Abort();
@@ -162,7 +191,7 @@ internal sealed class MainWindow
         ImGui.TableSetupColumn("Missing", ImGuiTableColumnFlags.WidthFixed, 70);
         ImGui.TableSetupColumn("Source", ImGuiTableColumnFlags.WidthFixed, 110);
         ImGui.TableSetupColumn("GBR", ImGuiTableColumnFlags.WidthFixed, 80);
-        ImGui.TableSetupColumn("MLH", ImGuiTableColumnFlags.WidthFixed, 80);
+        ImGui.TableSetupColumn("Drop Route", ImGuiTableColumnFlags.WidthFixed, 90);
         ImGui.TableHeadersRow();
 
         foreach (var req in requirements)
@@ -180,17 +209,68 @@ internal sealed class MainWindow
             if (req.SourceKind == MaterialSourceKind.Gatherable && ImGui.SmallButton($"Gather##{req.ItemId}"))
                 commands.StartGbrGather(req.Name);
             ImGui.TableNextColumn();
-            if (req.SourceKind == MaterialSourceKind.LikelyDropOnly && ImGui.SmallButton($"Lookup##{req.ItemId}"))
-                commands.OpenMonsterLootHunter(req.Name);
+            if (req.SourceKind == MaterialSourceKind.Drop && ImGui.SmallButton($"Queue##{req.ItemId}"))
+            {
+                GenerateDropHuntList();
+                dropHuntList.SetActive(req.ItemId);
+            }
         }
 
         ImGui.EndTable();
+    }
 
-        if (config.AutoOpenMonsterLootHunter && ImGui.Button("Open MLH For All Drop-Only"))
+    private void DrawDropHuntList()
+    {
+        ImGui.TextUnformatted(dropHuntList.Name);
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Refresh##drop-list"))
+            dropHuntList.Refresh();
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Route Active##drop-list"))
+            StartActiveDropHuntTarget();
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Next##drop-list"))
+            dropHuntList.Advance();
+
+        if (dropHuntList.Items.Count == 0)
         {
-            foreach (var req in requirements.Where(req => req.SourceKind == MaterialSourceKind.LikelyDropOnly))
-                commands.OpenMonsterLootHunter(req.Name);
+            ImGui.TextDisabled("Generate a drop hunt list from a plan to see droppable Vulcan deficits here.");
+            return;
         }
+
+        if (!ImGui.BeginTable("drop-hunt-list", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable))
+            return;
+
+        ImGui.TableSetupColumn("Active", ImGuiTableColumnFlags.WidthFixed, 58);
+        ImGui.TableSetupColumn("Item");
+        ImGui.TableSetupColumn("Need", ImGuiTableColumnFlags.WidthFixed, 60);
+        ImGui.TableSetupColumn("Have", ImGuiTableColumnFlags.WidthFixed, 60);
+        ImGui.TableSetupColumn("Route", ImGuiTableColumnFlags.WidthFixed, 80);
+        ImGui.TableHeadersRow();
+
+        var active = dropHuntList.ActiveItem;
+        foreach (var item in dropHuntList.Items)
+        {
+            ImGui.TableNextRow();
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(active?.ItemId == item.ItemId ? "yes" : item.Complete ? "done" : string.Empty);
+            ImGui.TableNextColumn();
+            var route = item.GetBestLocation();
+            ImGui.TextUnformatted(route == null ? $"{item.ItemName} (no route)" : item.ItemName);
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(item.Needed.ToString());
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(item.Owned.ToString());
+            ImGui.TableNextColumn();
+            if (ImGui.SmallButton($"Route##drop-{item.ItemId}"))
+            {
+                dropHuntList.SetActive(item.ItemId);
+                if (item.GetBestLocation() is { } location)
+                    monsterNavigator.Start(location);
+            }
+        }
+
+        ImGui.EndTable();
     }
 
     private static void DrawStatus(string name, bool available, string? detail)

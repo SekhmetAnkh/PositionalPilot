@@ -11,7 +11,6 @@ internal sealed class Configuration : IPluginConfiguration
 
     public int Version { get; set; } = 1;
     public bool PreferVulcanCraftCommand { get; set; } = true;
-    public bool AutoOpenMonsterLootHunter { get; set; } = true;
     public string TeleporterCommandTemplate { get; set; } = "/tp {0}";
     public string LastTargetText { get; set; } = string.Empty;
 

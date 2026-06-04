@@ -5,8 +5,11 @@ internal enum MaterialSourceKind
     Unknown,
     Inventory,
     Gatherable,
+    Fish,
     Craftable,
-    LikelyDropOnly,
+    Drop,
+    Vendor,
+    Other,
 }
 
 internal sealed record MaterialRequirement(
