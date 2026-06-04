@@ -69,4 +69,21 @@ internal abstract class IpcAdapterBase
             return false;
         }
     }
+
+    protected bool TryOptionalCall<T>(string name, Func<T> action, out T value)
+    {
+        try
+        {
+            value = action();
+            LastError = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            value = default!;
+            LastError = $"{name}: {ex.Message}";
+            Logger.Warning($"{GetType().Name}:{name}", LastError);
+            return false;
+        }
+    }
 }

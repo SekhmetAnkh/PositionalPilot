@@ -78,6 +78,18 @@ public sealed class PositionalGeometryTests
         Assert.False(PositionalGeometry.IsPositionInRequiredSlice(new Vector3(0, 0, 4), target, PositionalRequirement.Front));
         Assert.Equal("front escape", PositionalMovementRules.MovementModeName(PositionalRequirement.Front));
         Assert.True(PositionalMovementRules.ShouldBypassRepathCooldown(PositionalRequirement.Any, PositionalRequirement.Any, 0, 0, true));
+        Assert.True(PositionalMovementRules.CanFrontEscape(true, false));
+        Assert.True(PositionalMovementRules.CanFrontEscape(true, null));
+        Assert.False(PositionalMovementRules.CanFrontEscape(true, true));
+        Assert.False(PositionalMovementRules.CanFrontEscape(false, false));
+    }
+
+    [Fact]
+    public void TargetOfTargetOnlyBlocksWhenConfirmed()
+    {
+        Assert.True(PositionalMovementRules.ShouldBlockForTargetOfTarget(true));
+        Assert.False(PositionalMovementRules.ShouldBlockForTargetOfTarget(false));
+        Assert.False(PositionalMovementRules.ShouldBlockForTargetOfTarget(null));
     }
 
     [Fact]

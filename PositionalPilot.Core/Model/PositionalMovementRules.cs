@@ -5,6 +5,12 @@ public static class PositionalMovementRules
     public static bool IsCommittedPositional(PositionalRequirement requirement) =>
         requirement is PositionalRequirement.Rear or PositionalRequirement.Flank;
 
+    public static bool ShouldBlockForTargetOfTarget(bool? targetTargetsPlayer) =>
+        targetTargetsPlayer == true;
+
+    public static bool CanFrontEscape(bool isPlayerInFront, bool? targetTargetsPlayer) =>
+        isPlayerInFront && !ShouldBlockForTargetOfTarget(targetTargetsPlayer);
+
     public static string MovementModeName(PositionalRequirement requirement) =>
         requirement == PositionalRequirement.Front
             ? "front escape"

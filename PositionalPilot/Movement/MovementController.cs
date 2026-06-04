@@ -39,7 +39,7 @@ internal sealed class MovementController
         this.vnavmesh = vnavmesh;
         this.rotationSolver = rotationSolver;
         this.logger = logger;
-        safety = new SafetyGate(config, bossMod, vnavmesh, rotationSolver);
+        safety = new SafetyGate(config, bossMod);
     }
 
     public MovementState State { get; private set; } = MovementState.Idle;
@@ -53,7 +53,7 @@ internal sealed class MovementController
     public string CurrentMovementPositionalSource { get; private set; } = "not evaluated";
     public string CurrentMovementMode => PositionalMovementRules.MovementModeName(CurrentMovementPositional);
     public RotationSolverNextActionInfo LastRotationSolverNextAction => rotationSolver.GetNextGcdActionInfo();
-    public GameSnapshot LastSnapshot { get; private set; } = new(false, default, 0, 0, false, false, false, false, 0, string.Empty, 0, 0, default, 0, 0, null, false, false, false, false, false);
+    public GameSnapshot LastSnapshot { get; private set; } = new(false, default, 0, 0, false, false, false, false, 0, string.Empty, 0, 0, default, 0, 0, null, false, false, false, false);
 
     public void Update()
     {
@@ -108,7 +108,7 @@ internal sealed class MovementController
         CurrentPositional = cachedSafety.Positional;
         var nextAction = rotationSolver.GetNextGcdActionInfo();
         var movementPositional = ResolveMovementPositional(nextAction);
-        var frontEscape = IsPlayerCurrentlyInFront(LastSnapshot) && LastSnapshot.TargetTargetsPlayer != true;
+        var frontEscape = PositionalMovementRules.CanFrontEscape(IsPlayerCurrentlyInFront(LastSnapshot), LastSnapshot.TargetTargetsPlayer);
         if (frontEscape && !PositionalMovementRules.IsCommittedPositional(movementPositional))
             CurrentMovementPositionalSource = "front escape to rear/flank border";
 
@@ -298,7 +298,7 @@ internal sealed class MovementController
             return Block($"not a melee job (job {snapshot.JobId})", out reason);
         if (snapshot.TargetOmnidirectional == true)
             return Block("target does not require positionals", out reason);
-        if (snapshot.TargetTargetsPlayer == true)
+        if (PositionalMovementRules.ShouldBlockForTargetOfTarget(snapshot.TargetTargetsPlayer))
             return Block("target is targeting player", out reason);
 
         reason = string.Empty;

@@ -18,15 +18,11 @@ BossModReborn:
 - `BossMod.Hints.RecommendedPositional` -> `int`
 - `BossMod.Hints.IsPositionSafe` -> `Vector3 to => bool`
 - `BossMod.Hints.IsDashSafe` -> `Vector3 from, Vector3 to => bool`
-- `BossMod.Hints.ForbiddenZonesCount` -> `int`
-- `BossMod.Hints.ForbiddenZonesNextActivation` -> `float`
 - `BossMod.Hints.NextDamageIn` -> `float`
 - `BossMod.Timeline.NextKnockbackIn` -> `float`
 - `BossMod.Timeline.NextDowntimeIn` -> `float`
-- `BossMod.AI.PauseMovement` -> `bool pause`
 - `BossMod.AI.IsNavigating` -> `bool`
 - `BossMod.AI.NaviTargetPos` -> `Vector3?`
-- `BossMod.AI.PlayerSpeed` -> `float`
 
 BossMod positional enum mapping was verified as `Any=0`, `Flank=1`, `Rear=2`, `Front=3`. PositionalPilot exposes this for diagnostics, but it does not use BossMod recommended positionals as movement intent. BossMod safety and AI/navigation still have priority: unsafe destinations are rejected and active BossMod navigation blocks ppilot movement.
 
@@ -69,6 +65,10 @@ No useful rear/flank/range IPC was found.
 - `/ppilot suggest`: toggle SuggestOnly mode.
 - `/ppilot status`: print dependency, target, border side, destination, and block status.
 - `/ppilot debug`: toggle throttled debug logging.
+
+## Configuration UI
+
+The configuration window is organized into tabs for Main controls, Status, Safety, Movement, RotationSolver, and Debug. Hover any setting or important status row for a short explanation of what it changes and why the default is conservative.
 
 ## Safety Philosophy
 

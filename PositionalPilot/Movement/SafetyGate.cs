@@ -10,15 +10,11 @@ internal sealed class SafetyGate
 {
     private readonly Configuration config;
     private readonly BossModIpc bossMod;
-    private readonly VnavmeshIpc vnavmesh;
-    private readonly RotationSolverIpc rotationSolver;
 
-    public SafetyGate(Configuration config, BossModIpc bossMod, VnavmeshIpc vnavmesh, RotationSolverIpc rotationSolver)
+    public SafetyGate(Configuration config, BossModIpc bossMod)
     {
         this.config = config;
         this.bossMod = bossMod;
-        this.vnavmesh = vnavmesh;
-        this.rotationSolver = rotationSolver;
     }
 
     public bool CanEvaluate(GameSnapshot snapshot, CachedSafetyState safety, out string reason)
@@ -38,7 +34,7 @@ internal sealed class SafetyGate
             return Block($"not a melee job (job {snapshot.JobId})", out reason);
         if (snapshot.TargetOmnidirectional == true)
             return Block("target does not require positionals", out reason);
-        if (snapshot.TargetTargetsPlayer == true)
+        if (PositionalMovementRules.ShouldBlockForTargetOfTarget(snapshot.TargetTargetsPlayer))
             return Block("target is targeting player", out reason);
         if (s.RequiredDependencies.HasFlag(RequiredDependencies.RequireVnavmesh) && !safety.VnavmeshReady)
             return Block("vnavmesh unavailable or navmesh not ready", out reason);

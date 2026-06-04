@@ -36,8 +36,13 @@ internal sealed class VnavmeshIpc : IpcAdapterBase
     public bool PathfindAndMoveTo(Vector3 destination) =>
         TryCall(nameof(PathfindAndMoveTo), () => moveTo.InvokeFunc(destination, false), out var started) && started;
 
-    public bool PathfindAndMoveCloseTo(Vector3 destination, float tolerance) =>
-        TryCall(nameof(PathfindAndMoveCloseTo), () => moveCloseTo.InvokeFunc(destination, false, tolerance), out var started) && started;
+    public bool PathfindAndMoveCloseTo(Vector3 destination, float tolerance)
+    {
+        if (moveCloseTo.HasFunction)
+            return TryCall(nameof(PathfindAndMoveCloseTo), () => moveCloseTo.InvokeFunc(destination, false, tolerance), out var started) && started;
+
+        return PathfindAndMoveTo(destination);
+    }
 
     public void Stop() => TryCall(nameof(Stop), () => stop.InvokeAction());
 }
