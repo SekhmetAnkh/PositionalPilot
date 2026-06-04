@@ -1,0 +1,161 @@
+using Dalamud.Game.Command;
+using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
+using PositionalPilot.Core.Model;
+using PositionalPilot.Game;
+using PositionalPilot.IPC;
+using PositionalPilot.Movement;
+using PositionalPilot.UI;
+
+namespace PositionalPilot;
+
+public sealed class Plugin : IDalamudPlugin
+{
+    private const string CommandName = "/ppilot";
+    private readonly PluginServices services;
+    private readonly Configuration config;
+    private readonly ThrottledLogger logger;
+    private readonly BossModIpc bossMod;
+    private readonly RotationSolverIpc rotationSolver;
+    private readonly WrathComboIpc wrathCombo;
+    private readonly VnavmeshIpc vnavmesh;
+    private readonly AvariceIpc avarice;
+    private readonly GameStateReader gameState;
+    private readonly MovementController movement;
+    private readonly ConfigWindow window;
+
+    public Plugin(
+        IDalamudPluginInterface pluginInterface,
+        ICommandManager commands,
+        IClientState clientState,
+        IObjectTable objects,
+        ITargetManager targets,
+        IDataManager data,
+        ICondition condition,
+        IFramework framework,
+        IChatGui chat,
+        IPluginLog log)
+    {
+        services = new PluginServices(pluginInterface, commands, clientState, objects, targets, data, condition, framework, chat, log);
+        config = pluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        config.Initialize(pluginInterface);
+        logger = new ThrottledLogger(services);
+        bossMod = new BossModIpc(services, logger);
+        rotationSolver = new RotationSolverIpc(services, logger);
+        wrathCombo = new WrathComboIpc(services, logger);
+        vnavmesh = new VnavmeshIpc(services, logger);
+        avarice = new AvariceIpc(services, logger);
+        gameState = new GameStateReader(services);
+        movement = new MovementController(config, gameState, bossMod, vnavmesh, rotationSolver, wrathCombo, logger);
+        window = new ConfigWindow(config, bossMod, rotationSolver, wrathCombo, vnavmesh, avarice, movement);
+
+        services.Commands.AddHandler(CommandName, new CommandInfo(OnCommand)
+        {
+            HelpMessage = "Open PositionalPilot. Args: on, off, stop, suggest, status, debug",
+        });
+        services.Framework.Update += OnFrameworkUpdate;
+        services.PluginInterface.UiBuilder.Draw += Draw;
+        services.PluginInterface.UiBuilder.OpenConfigUi += OpenConfig;
+    }
+
+    public void Dispose()
+    {
+        movement.Stop("plugin disposed");
+        services.Framework.Update -= OnFrameworkUpdate;
+        services.PluginInterface.UiBuilder.Draw -= Draw;
+        services.PluginInterface.UiBuilder.OpenConfigUi -= OpenConfig;
+        services.Commands.RemoveHandler(CommandName);
+        rotationSolver.Dispose();
+        wrathCombo.Dispose();
+    }
+
+    private void OnFrameworkUpdate(IFramework framework) => movement.Update();
+
+    private void Draw()
+    {
+        window.Draw();
+        window.DrawOverlay();
+    }
+
+    private void OpenConfig() => window.IsOpen = true;
+
+    private void OnCommand(string command, string args)
+    {
+        var arg = args.Trim().ToLowerInvariant();
+        switch (arg)
+        {
+            case "":
+                window.IsOpen = true;
+                break;
+            case "on":
+                config.Settings.Enabled = true;
+                config.Settings.MovementMode = MovementMode.AssistMove;
+                movement.ClearEmergencyStop();
+                config.Save();
+                services.Chat.Print("PositionalPilot assist movement enabled.");
+                break;
+            case "off":
+                config.Settings.Enabled = false;
+                config.Settings.MovementMode = MovementMode.Disabled;
+                movement.Stop("disabled by command");
+                config.Save();
+                services.Chat.Print("PositionalPilot disabled.");
+                break;
+            case "stop":
+                movement.EmergencyStop();
+                services.Chat.Print("PositionalPilot emergency stop: disabled and movement stopped.");
+                break;
+            case "suggest":
+                config.Settings.Enabled = true;
+                config.Settings.MovementMode = config.Settings.MovementMode == MovementMode.SuggestOnly ? MovementMode.Disabled : MovementMode.SuggestOnly;
+                movement.ClearEmergencyStop();
+                config.Save();
+                services.Chat.Print($"PositionalPilot suggest mode: {config.Settings.MovementMode == MovementMode.SuggestOnly}");
+                break;
+            case "status":
+                PrintStatus();
+                break;
+            case "debug":
+                config.Settings.DebugLogging = !config.Settings.DebugLogging;
+                config.Save();
+                services.Chat.Print($"PositionalPilot debug logging: {config.Settings.DebugLogging}");
+                break;
+            default:
+                services.Chat.Print("Usage: /ppilot [on|off|stop|suggest|status|debug]");
+                break;
+        }
+    }
+
+    private void PrintStatus()
+    {
+        movement.RefreshDependencyStatus(true);
+        bossMod.RefreshAvailability();
+        rotationSolver.RefreshAvailability();
+        wrathCombo.RefreshAvailability();
+        vnavmesh.RefreshAvailability();
+        avarice.RefreshAvailability();
+
+        var snap = movement.LastSnapshot;
+        var positionals = snap.TargetOmnidirectional switch
+        {
+            true => "not required",
+            false => "required",
+            _ => "unknown",
+        };
+        var cacheAge = movement.LastCachedSafety.UpdatedAt == DateTime.MinValue
+            ? "never"
+            : $"{(DateTime.UtcNow - movement.LastCachedSafety.UpdatedAt).TotalMilliseconds:F0}ms";
+        services.Chat.Print($"PositionalPilot: enabled={config.Settings.Enabled}, mode={config.Settings.MovementMode}, state={movement.State}");
+        services.Chat.Print($"Deps: BossMod={bossMod.Available} ({bossMod.LastError ?? "ok"}), RSR={rotationSolver.Available} ({rotationSolver.LastError ?? "ok"}), RSRNext={rotationSolver.NextActionEventsAvailable} ({rotationSolver.EventLastError ?? "ok"}), Wrath={wrathCombo.Available} ({wrathCombo.LastError ?? "ok"}), WrathEvents={wrathCombo.ActionEventsAvailable} ({wrathCombo.EventLastError ?? "ok"}), vnavmesh={vnavmesh.Available} ({vnavmesh.LastError ?? "ok"}), Avarice={avarice.Available} ({avarice.LastError ?? "optional"})");
+        var targetTargetsPlayer = snap.TargetTargetsPlayer switch { true => "yes", false => "no", _ => "unknown" };
+        services.Chat.Print($"Target: {(snap.HasTarget ? snap.TargetName : "none")}, targetPositionals={positionals}, targetTargetsPlayer={targetTargetsPlayer}, trueNorth={snap.TrueNorthAvailable}, positional={movement.CurrentPositional}, movement={movement.CurrentMovementPositional} ({movement.CurrentMovementMode}; {movement.CurrentMovementPositionalSource}), border={movement.CurrentBorderSide}, destination={movement.ChosenDestination?.ToString() ?? "none"}, block={movement.BlockReason}, cacheAge={cacheAge}");
+        var next = movement.LastRotationSolverNextAction;
+        var nextAge = next.NextGcdUpdatedAt == DateTime.MinValue ? "never" : $"{(DateTime.UtcNow - next.NextGcdUpdatedAt).TotalMilliseconds:F0}ms";
+        var nextActionAge = next.NextActionUpdatedAt == DateTime.MinValue ? "never" : $"{(DateTime.UtcNow - next.NextActionUpdatedAt).TotalMilliseconds:F0}ms";
+        services.Chat.Print($"RSR next GCD: {next.NextGcdActionName} ({next.NextGcdActionId}), positional={next.NextGcdRequirement}, age={nextAge}, NoCasting={movement.LastNoCastingReason}");
+        services.Chat.Print($"RSR next action: {next.NextActionName} ({next.NextActionId}), positional={next.NextActionRequirement}, age={nextActionAge}");
+        var wrath = movement.LastWrathComboNextAction;
+        var wrathAge = wrath.LastGcdUpdatedAt == DateTime.MinValue ? "never" : $"{(DateTime.UtcNow - wrath.LastGcdUpdatedAt).TotalMilliseconds:F0}ms";
+        services.Chat.Print($"WrathCombo last GCD: {wrath.LastGcdActionName} ({wrath.LastGcdActionId}), inferredNext={wrath.InferredNextRequirement}, age={wrathAge}, source={config.Settings.CombatIntentSource}");
+    }
+}

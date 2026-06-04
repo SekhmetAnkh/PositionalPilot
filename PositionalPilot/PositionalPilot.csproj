@@ -1,0 +1,20 @@
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>PositionalPilot</AssemblyName>
+    <RootNamespace>PositionalPilot</RootNamespace>
+    <Version>0.1.27</Version>
+    <AssemblyVersion>0.1.27.0</AssemblyVersion>
+    <FileVersion>0.1.27.0</FileVersion>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PositionalPilot.Core\PositionalPilot.Core.csproj" />
+  </ItemGroup>
+</Project>
