@@ -146,11 +146,13 @@ internal sealed class VulcanReflectionAdapter(PluginServices services)
             return true;
 
         var assembly = AppDomain.CurrentDomain.GetAssemblies()
-            .FirstOrDefault(assembly => string.Equals(assembly.GetName().Name, "GatherBuddy", StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(assembly => string.Equals(assembly.GetName().Name, "GatherBuddyReborn", StringComparison.OrdinalIgnoreCase))
+            ?? AppDomain.CurrentDomain.GetAssemblies()
+                .FirstOrDefault(assembly => assembly.GetType("GatherBuddy.Crafting.CraftingGatherBridge") != null);
         if (assembly == null)
         {
             Available = false;
-            lastError = "GatherBuddy assembly not loaded.";
+            lastError = "GatherBuddyReborn assembly not loaded.";
             return false;
         }
 

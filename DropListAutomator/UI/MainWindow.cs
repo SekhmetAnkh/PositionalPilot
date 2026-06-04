@@ -8,6 +8,7 @@ namespace DropListAutomator.UI;
 
 internal sealed class MainWindow
 {
+    private readonly Configuration config;
     private readonly GatherBuddyRebornIpc gbr;
     private readonly LifestreamIpc lifestream;
     private readonly VnavmeshIpc vnavmesh;
@@ -15,16 +16,20 @@ internal sealed class MainWindow
     private readonly MonsterNavigator monsterNavigator;
     private readonly DropHuntListManager dropHuntList;
     private readonly VulcanDropAutomation automation;
+    private readonly CombatJobService combatJobs;
 
     public MainWindow(
+        Configuration config,
         GatherBuddyRebornIpc gbr,
         LifestreamIpc lifestream,
         VnavmeshIpc vnavmesh,
         RotationSolverRebornIpc rotationSolver,
         MonsterNavigator monsterNavigator,
         DropHuntListManager dropHuntList,
-        VulcanDropAutomation automation)
+        VulcanDropAutomation automation,
+        CombatJobService combatJobs)
     {
+        this.config = config;
         this.gbr = gbr;
         this.lifestream = lifestream;
         this.vnavmesh = vnavmesh;
@@ -32,6 +37,7 @@ internal sealed class MainWindow
         this.monsterNavigator = monsterNavigator;
         this.dropHuntList = dropHuntList;
         this.automation = automation;
+        this.combatJobs = combatJobs;
     }
 
     public bool IsOpen { get; set; }
@@ -96,11 +102,37 @@ internal sealed class MainWindow
         ImGui.TextUnformatted($"Vulcan plan: {automation.CurrentPlanName}");
         ImGui.TextUnformatted($"Vulcan queue: {automation.QueueState}");
         ImGui.TextUnformatted($"Automation: {automation.StatusText}");
+        DrawCombatJobSelector();
+        ImGui.TextUnformatted($"Combat job: {automation.CombatJobStatus}");
         DrawStatusLine("GBR", gbr.Available, gbr.Available ? $"IPC v{gbr.GetVersion()}: {gbr.GetStatus()}" : gbr.LastError);
         DrawStatusLine("Lifestream", lifestream.Available, lifestream.Available ? $"busy={lifestream.IsBusy()}" : lifestream.LastError);
         DrawStatusLine("vnavmesh", vnavmesh.Available, vnavmesh.Available ? $"ready={vnavmesh.IsReady()}, moving={vnavmesh.IsNavigating()}" : vnavmesh.LastError);
         DrawStatusLine("RSR", rotationSolver.Available, rotationSolver.Available ? "ready" : rotationSolver.LastError);
         DrawStatusLine("Monster nav", monsterNavigator.State != MonsterNavigationState.Failed, monsterNavigator.StatusText);
+    }
+
+    private void DrawCombatJobSelector()
+    {
+        var selectedLabel = combatJobs.GetSelectedJobLabel();
+        if (!ImGui.BeginCombo("Combat job", selectedLabel))
+            return;
+
+        if (ImGui.Selectable("None", config.CombatClassJobId == 0))
+        {
+            config.CombatClassJobId = 0;
+            config.Save();
+        }
+
+        foreach (var job in combatJobs.GetCombatJobs())
+        {
+            if (!ImGui.Selectable(job.Label, config.CombatClassJobId == job.ClassJobId))
+                continue;
+
+            config.CombatClassJobId = job.ClassJobId;
+            config.Save();
+        }
+
+        ImGui.EndCombo();
     }
 
     private void DrawActions()

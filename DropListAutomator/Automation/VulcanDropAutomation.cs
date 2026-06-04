@@ -9,6 +9,7 @@ internal sealed class VulcanDropAutomation(
     VulcanReflectionAdapter vulcan,
     MaterialPlanner planner,
     DropHuntListManager dropHuntList,
+    CombatJobService combatJobs,
     MonsterNavigator monsterNavigator)
 {
     private const string PauseReason = "DropListAutomator: hunting drop-only materials";
@@ -20,6 +21,7 @@ internal sealed class VulcanDropAutomation(
     public string StatusText { get; private set; } = "Waiting for Vulcan.";
     public string CurrentPlanName { get; private set; } = "None";
     public string QueueState { get; private set; } = "None";
+    public string CombatJobStatus => combatJobs.StatusText;
     public bool HasActiveDropWork => dropHuntList.Enabled && dropHuntList.Items.Count > 0 && !dropHuntList.IsComplete;
     public bool VulcanPaused => pausedVulcan;
     public string? VulcanListenerError => vulcan.LastError;
@@ -165,6 +167,12 @@ internal sealed class VulcanDropAutomation(
         if (active.GetBestLocation() is not { } location)
         {
             StatusText = $"No route data for {active.ItemName}; Vulcan remains paused.";
+            return;
+        }
+
+        if (!combatJobs.EnsureReadyForDropHunt())
+        {
+            StatusText = combatJobs.StatusText;
             return;
         }
 
