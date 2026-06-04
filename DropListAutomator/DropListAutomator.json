@@ -1,0 +1,17 @@
+{
+  "Author": "papou",
+  "Name": "Drop List Automator",
+  "InternalName": "DropListAutomator",
+  "AssemblyVersion": "0.1.0.0",
+  "Description": "Coordinates GBR/Vulcan lists with Monster Loot Hunter, Lifestream/Teleporter, vnavmesh, and RSR for drop-only crafting materials.",
+  "Punchline": "Route to drop-only materials from crafting plans.",
+  "ApplicableVersion": "any",
+  "RepoUrl": "https://github.com/SekhmetAnkh/PositionalPilot",
+  "Tags": [
+    "gathering",
+    "crafting",
+    "materials",
+    "navigation",
+    "combat"
+  ]
+}

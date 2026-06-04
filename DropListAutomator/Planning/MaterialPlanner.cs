@@ -1,0 +1,120 @@
+using Dalamud.Plugin.Services;
+using Lumina.Excel.Sheets;
+
+namespace DropListAutomator.Planning;
+
+internal sealed class MaterialPlanner(PluginServices services)
+{
+    public IReadOnlyList<MaterialRequirement> Plan(string input)
+    {
+        var requests = ParseRequests(input);
+        if (requests.Count == 0)
+            return [];
+
+        var items = services.Data.GetExcelSheet<Item>();
+        var recipes = services.Data.GetExcelSheet<Recipe>();
+        var gatherables = services.Data.GetExcelSheet<GatheringItem>()
+            .Where(row => row.Item.RowId != 0)
+            .Select(row => row.Item.RowId)
+            .ToHashSet();
+
+        var itemByName = items
+            .Where(item => item.RowId != 0 && !item.Name.IsEmpty)
+            .GroupBy(item => Normalize(item.Name.ExtractText()))
+            .ToDictionary(group => group.Key, group => group.First());
+
+        var recipeByResult = recipes
+            .Where(recipe => recipe.RowId != 0 && recipe.ItemResult.RowId != 0)
+            .GroupBy(recipe => recipe.ItemResult.RowId)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        var materialCounts = new Dictionary<uint, int>();
+        foreach (var request in requests)
+        {
+            if (!itemByName.TryGetValue(Normalize(request.Name), out var item))
+                continue;
+
+            AddRecipeMaterials(item.RowId, request.Quantity, recipeByResult, materialCounts, depth: 0);
+        }
+
+        return materialCounts
+            .Select(pair =>
+            {
+                var item = items.GetRow(pair.Key);
+                var name = item.Name.ExtractText();
+                var owned = 0;
+                var source = Classify(pair.Key, gatherables, recipeByResult);
+                var recipeId = recipeByResult.TryGetValue(pair.Key, out var recipe) ? recipe.RowId : (uint?)null;
+                return new MaterialRequirement(pair.Key, name, pair.Value, owned, source, recipeId);
+            })
+            .OrderByDescending(req => req.SourceKind == MaterialSourceKind.LikelyDropOnly)
+            .ThenBy(req => req.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static void AddRecipeMaterials(
+        uint itemId,
+        int quantity,
+        IReadOnlyDictionary<uint, Recipe> recipeByResult,
+        IDictionary<uint, int> output,
+        int depth)
+    {
+        if (depth > 6 || !recipeByResult.TryGetValue(itemId, out var recipe))
+        {
+            output[itemId] = GetExisting(output, itemId) + quantity;
+            return;
+        }
+
+        var resultAmount = Math.Max(1, (int)recipe.AmountResult);
+        var craftsNeeded = (int)Math.Ceiling(quantity / (double)resultAmount);
+        var hadIngredient = false;
+
+        for (var i = 0; i < 10; i++)
+        {
+            var ingredient = recipe.Ingredient[i];
+            var amount = (int)recipe.AmountIngredient[i];
+            if (ingredient.RowId == 0 || amount <= 0)
+                continue;
+
+            hadIngredient = true;
+            AddRecipeMaterials(ingredient.RowId, amount * craftsNeeded, recipeByResult, output, depth + 1);
+        }
+
+        if (!hadIngredient)
+            output[itemId] = GetExisting(output, itemId) + quantity;
+    }
+
+    private static MaterialSourceKind Classify(
+        uint itemId,
+        IReadOnlySet<uint> gatherables,
+        IReadOnlyDictionary<uint, Recipe> recipeByResult)
+    {
+        if (gatherables.Contains(itemId))
+            return MaterialSourceKind.Gatherable;
+
+        if (recipeByResult.ContainsKey(itemId))
+            return MaterialSourceKind.Craftable;
+
+        return MaterialSourceKind.LikelyDropOnly;
+    }
+
+    private static List<(string Name, int Quantity)> ParseRequests(string input)
+    {
+        var requests = new List<(string Name, int Quantity)>();
+        foreach (var line in input.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var parts = line.Split('x', 2, StringSplitOptions.TrimEntries);
+            if (parts.Length == 2 && int.TryParse(parts[1], out var quantity))
+                requests.Add((parts[0], Math.Max(1, quantity)));
+            else
+                requests.Add((line, 1));
+        }
+
+        return requests;
+    }
+
+    private static string Normalize(string value) => value.Trim().ToLowerInvariant();
+
+    private static int GetExisting(IDictionary<uint, int> values, uint itemId) =>
+        values.TryGetValue(itemId, out var current) ? current : 0;
+}

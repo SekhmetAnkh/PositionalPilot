@@ -25,5 +25,36 @@
     "DownloadLinkInstall": "https://github.com/SekhmetAnkh/PositionalPilot/releases/latest/download/latest.zip",
     "DownloadLinkTesting": "https://github.com/SekhmetAnkh/PositionalPilot/releases/latest/download/latest.zip",
     "DownloadLinkUpdate": "https://github.com/SekhmetAnkh/PositionalPilot/releases/latest/download/latest.zip"
+  },
+  {
+    "Author": "papou",
+    "Name": "Drop List Automator",
+    "Punchline": "Route to drop-only materials from crafting plans.",
+    "Description": "Coordinates GatherBuddy Reborn/Vulcan crafting plans with Monster Loot Hunter, Lifestream or Teleporter, vnavmesh, and RotationSolverReborn. It follows GBR-style teleport/wait/navigate routing, then targets only the hunted monster and requests RSR manual mode.",
+    "InternalName": "DropListAutomator",
+    "AssemblyVersion": "0.1.0.0",
+    "RepoUrl": "https://github.com/SekhmetAnkh/PositionalPilot",
+    "ApplicableVersion": "any",
+    "DalamudApiLevel": 15,
+    "Tags": [
+      "crafting",
+      "gathering",
+      "materials",
+      "navigation",
+      "combat"
+    ],
+    "CategoryTags": [
+      "crafting",
+      "gathering",
+      "utility",
+      "combat"
+    ],
+    "IsHide": false,
+    "IsTestingExclusive": false,
+    "DownloadCount": 0,
+    "LastUpdate": 1780534800,
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/SekhmetAnkh/PositionalPilot/main/releases/DropListAutomator-latest.zip",
+    "DownloadLinkTesting": "https://raw.githubusercontent.com/SekhmetAnkh/PositionalPilot/main/releases/DropListAutomator-latest.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/SekhmetAnkh/PositionalPilot/main/releases/DropListAutomator-latest.zip"
   }
 ]
