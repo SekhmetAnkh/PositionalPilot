@@ -94,6 +94,7 @@ internal sealed class MainWindow
     {
         RefreshDependencies();
         ImGui.TextUnformatted($"Vulcan plan: {automation.CurrentPlanName}");
+        ImGui.TextUnformatted($"Vulcan queue: {automation.QueueState}");
         ImGui.TextUnformatted($"Automation: {automation.StatusText}");
         DrawStatusLine("GBR", gbr.Available, gbr.Available ? $"IPC v{gbr.GetVersion()}: {gbr.GetStatus()}" : gbr.LastError);
         DrawStatusLine("Lifestream", lifestream.Available, lifestream.Available ? $"busy={lifestream.IsBusy()}" : lifestream.LastError);

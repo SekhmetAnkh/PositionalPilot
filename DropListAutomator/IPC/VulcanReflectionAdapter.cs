@@ -18,10 +18,25 @@ internal sealed record VulcanExecutionPlanSnapshot(
     }
 }
 
+internal sealed record VulcanQueueSnapshot(
+    string State,
+    bool WaitingForGatherComplete,
+    bool IsGatheringComplete,
+    bool Paused,
+    string PauseReason)
+{
+    public bool IsWaitingForGather => string.Equals(State, "WaitingForGather", StringComparison.Ordinal);
+    public bool IsPostGather => string.Equals(State, "WaitingForJobSwitch", StringComparison.Ordinal)
+        || string.Equals(State, "ReadyForCraft", StringComparison.Ordinal)
+        || string.Equals(State, "Crafting", StringComparison.Ordinal);
+}
+
 internal sealed class VulcanReflectionAdapter(PluginServices services)
 {
     private Type? bridgeType;
     private MethodInfo? getActiveExecutionPlan;
+    private MethodInfo? isGatheringComplete;
+    private PropertyInfo? waitingForGatherComplete;
     private FieldInfo? queueProcessorField;
     private string? lastError;
 
@@ -85,6 +100,29 @@ internal sealed class VulcanReflectionAdapter(PluginServices services)
         }
     }
 
+    public VulcanQueueSnapshot? GetQueueSnapshot()
+    {
+        if (!EnsureBindings())
+            return null;
+
+        try
+        {
+            var queueProcessor = queueProcessorField!.GetValue(null);
+            var state = queueProcessor?.GetType().GetProperty("CurrentState")?.GetValue(queueProcessor)?.ToString() ?? "None";
+            var paused = queueProcessor?.GetType().GetProperty("Paused")?.GetValue(queueProcessor) as bool? ?? false;
+            var pauseReason = queueProcessor?.GetType().GetProperty("PauseReason")?.GetValue(queueProcessor) as string ?? string.Empty;
+            var waiting = waitingForGatherComplete?.GetValue(null) as bool? ?? false;
+            var gatheringComplete = isGatheringComplete?.Invoke(null, null) as bool? ?? false;
+            return new VulcanQueueSnapshot(state, waiting, gatheringComplete, paused, pauseReason);
+        }
+        catch (Exception ex)
+        {
+            lastError = $"Failed to read Vulcan queue state: {ex.GetBaseException().Message}";
+            services.Log.Warning(ex, "Failed to read Vulcan queue state through reflection.");
+            return null;
+        }
+    }
+
     private object? GetQueueProcessor()
     {
         if (!EnsureBindings())
@@ -118,9 +156,15 @@ internal sealed class VulcanReflectionAdapter(PluginServices services)
 
         bridgeType = assembly.GetType("GatherBuddy.Crafting.CraftingGatherBridge");
         getActiveExecutionPlan = bridgeType?.GetMethod("GetActiveExecutionPlan", BindingFlags.Public | BindingFlags.Static, Type.EmptyTypes);
+        isGatheringComplete = bridgeType?.GetMethod("IsGatheringComplete", BindingFlags.Public | BindingFlags.Static, Type.EmptyTypes);
+        waitingForGatherComplete = bridgeType?.GetProperty("WaitingForGatherComplete", BindingFlags.Public | BindingFlags.Static);
         queueProcessorField = bridgeType?.GetField("_queueProcessor", BindingFlags.NonPublic | BindingFlags.Static);
 
-        Available = bridgeType != null && getActiveExecutionPlan != null && queueProcessorField != null;
+        Available = bridgeType != null
+            && getActiveExecutionPlan != null
+            && isGatheringComplete != null
+            && waitingForGatherComplete != null
+            && queueProcessorField != null;
         lastError = Available ? null : "GatherBuddy Vulcan internals were not found.";
         return Available;
     }

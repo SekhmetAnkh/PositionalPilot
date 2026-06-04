@@ -19,6 +19,7 @@ internal sealed class VulcanDropAutomation(
 
     public string StatusText { get; private set; } = "Waiting for Vulcan.";
     public string CurrentPlanName { get; private set; } = "None";
+    public string QueueState { get; private set; } = "None";
     public bool HasActiveDropWork => dropHuntList.Enabled && dropHuntList.Items.Count > 0 && !dropHuntList.IsComplete;
     public bool VulcanPaused => pausedVulcan;
     public string? VulcanListenerError => vulcan.LastError;
@@ -34,6 +35,14 @@ internal sealed class VulcanDropAutomation(
         }
 
         CurrentPlanName = snapshot.ListName;
+        var queue = vulcan.GetQueueSnapshot();
+        if (queue == null)
+        {
+            StatusText = $"Vulcan listener unavailable: {vulcan.LastError}";
+            return;
+        }
+
+        QueueState = queue.State;
         if (activePlanSignature != snapshot.Signature)
         {
             activePlanSignature = snapshot.Signature;
@@ -47,6 +56,12 @@ internal sealed class VulcanDropAutomation(
         {
             ResumeIfNeeded();
             StatusText = $"Vulcan plan '{snapshot.ListName}' has no missing drop materials.";
+            return;
+        }
+
+        if (!IsGbrGatheringComplete(queue))
+        {
+            StatusText = $"Pending GBR gathering. {dropHuntList.StatusText}";
             return;
         }
 
@@ -107,14 +122,26 @@ internal sealed class VulcanDropAutomation(
     private void PauseVulcanForDrops()
     {
         if (!pausedVulcan)
-        {
             pausedVulcan = vulcan.PauseQueue(PauseReason);
-            gbr.SetAutoGatherEnabled(false);
-        }
 
         StatusText = pausedVulcan
             ? $"Paused Vulcan for drops. {dropHuntList.StatusText}"
             : $"Drop hunt active; failed to pause Vulcan: {vulcan.LastError ?? "unknown error"}";
+    }
+
+    private bool IsGbrGatheringComplete(VulcanQueueSnapshot queue)
+    {
+        gbr.RefreshAvailability();
+        if (gbr.Available && gbr.IsAutoGatherEnabled())
+            return false;
+
+        if (queue.IsWaitingForGather)
+            return false;
+
+        if (!queue.IsGatheringComplete)
+            return false;
+
+        return queue.IsPostGather || !queue.WaitingForGatherComplete || queue.Paused && queue.PauseReason == PauseReason;
     }
 
     private void ResumeIfNeeded()
