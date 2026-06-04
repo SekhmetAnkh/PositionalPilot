@@ -34,6 +34,26 @@ internal sealed class MaterialPlanner(PluginServices services, DropLocationProvi
             AddRecipeMaterials(item.RowId, request.Quantity, recipeByResult, materialCounts, depth: 0);
         }
 
+        return ToRequirements(materialCounts, items, recipeByResult, sourceClassifier);
+    }
+
+    public IReadOnlyList<MaterialRequirement> PlanMaterialCounts(IReadOnlyDictionary<uint, int> materialCounts)
+    {
+        var items = services.Data.GetExcelSheet<Item>();
+        var recipeByResult = services.Data.GetExcelSheet<Recipe>()
+            .Where(recipe => recipe.RowId != 0 && recipe.ItemResult.RowId != 0)
+            .GroupBy(recipe => recipe.ItemResult.RowId)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        return ToRequirements(materialCounts, items, recipeByResult, sourceClassifier);
+    }
+
+    private static IReadOnlyList<MaterialRequirement> ToRequirements(
+        IEnumerable<KeyValuePair<uint, int>> materialCounts,
+        Lumina.Excel.ExcelSheet<Item> items,
+        IReadOnlyDictionary<uint, Recipe> recipeByResult,
+        MaterialSourceClassifier sourceClassifier)
+    {
         return materialCounts
             .Select(pair =>
             {

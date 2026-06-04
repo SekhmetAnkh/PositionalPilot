@@ -10,9 +10,7 @@ internal sealed class Configuration : IPluginConfiguration
     private IDalamudPluginInterface? pluginInterface;
 
     public int Version { get; set; } = 1;
-    public bool PreferVulcanCraftCommand { get; set; } = true;
     public string TeleporterCommandTemplate { get; set; } = "/tp {0}";
-    public string LastTargetText { get; set; } = string.Empty;
 
     public void Initialize(IDalamudPluginInterface pi) => pluginInterface = pi;
 
