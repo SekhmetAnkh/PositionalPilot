@@ -38,7 +38,8 @@ internal sealed class MonsterRoutePlanner(PluginServices services)
         var markers = services.Data.GetSubrowExcelSheet<MapMarker>()
             .SelectMany(row => row)
             .Where(marker => marker.DataType == 3)
-            .ToDictionary(marker => marker.DataKey.RowId, marker => marker);
+            .GroupBy(marker => marker.DataKey.RowId)
+            .ToDictionary(group => group.Key, group => group.First());
 
         var scale = Math.Max(0.01f, map.SizeFactor / 100f);
         return services.Data.GetExcelSheet<Aetheryte>()
