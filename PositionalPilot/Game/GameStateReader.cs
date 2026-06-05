@@ -78,6 +78,7 @@ internal sealed unsafe class GameStateReader
 
         var targetBaseId = target.BaseId;
         var targetDataId = target.DataId;
+        var targetName = target.Name.ToString();
         return new GameSnapshot(
             true,
             playerPos,
@@ -88,7 +89,7 @@ internal sealed unsafe class GameStateReader
             moved,
             true,
             target.GameObjectId,
-            target.Name.ToString(),
+            targetName,
             targetBaseId,
             targetDataId,
             target.Position,
@@ -100,6 +101,7 @@ internal sealed unsafe class GameStateReader
             target.IsTargetable,
             IsTrueNorthAvailable())
         {
+            TargetIsTrainingDummy = IsTrainingDummy(targetName),
             WrathPredictionSnapshot = ReadWrathPredictionSnapshot(player, target, now),
         };
     }
@@ -290,4 +292,7 @@ internal sealed unsafe class GameStateReader
             return null;
         }
     }
+
+    private static bool IsTrainingDummy(string targetName) =>
+        targetName.Contains("dummy", StringComparison.OrdinalIgnoreCase);
 }

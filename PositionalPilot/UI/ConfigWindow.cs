@@ -148,6 +148,7 @@ internal sealed class ConfigWindow
         ImGui.Separator();
         ImGui.TextUnformatted("Current state");
         DrawStatusRow("Target", s.HasTarget ? s.TargetName : "none", "The current target used for hitbox, facing, and target-of-target checks.");
+        DrawStatusRow("Target dummy", s.TargetIsTrainingDummy ? "yes" : "no", "Training/striking dummies ignore the target-targeting-player movement block.");
         DrawStatusRow("Target positionals", positionals, "Omnidirectional targets do not require positionals, so assist movement is blocked.");
         DrawStatusRow("Target targeting player", targetTargetsPlayer, "Confirmed yes blocks assist movement to avoid chasing a target that is tracking you.");
         DrawStatusRow("Target hitbox", $"{s.TargetHitboxRadius:F2}", "Used with Distance from hitbox to choose the destination ring.");

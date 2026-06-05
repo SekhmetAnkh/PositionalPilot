@@ -26,4 +26,5 @@ internal sealed record GameSnapshot(
     bool TrueNorthAvailable)
 {
     public WrathLocalPredictionSnapshot WrathPredictionSnapshot { get; init; } = new();
+    public bool TargetIsTrainingDummy { get; init; }
 }

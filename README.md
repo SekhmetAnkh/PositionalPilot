@@ -118,7 +118,7 @@ The repository manifest points to the latest GitHub release asset named `Positio
 - Fresh known RSR next-GCD/next-action positional changes or fresh known Wrath local predictions can bypass the repath cooldown once, so it reacts faster without repeatedly querying vnavmesh.
 - BossMod recommended positionals are not converted into ppilot movement destinations. If the selected combat source does not provide a fresh known Rear/Flank intent, ppilot holds the nearest rear/flank border.
 - If the player is currently in the target's front slice, ppilot treats that as an escape signal and bypasses normal repath cooldown to move toward an intended rear/flank border when BossMod safety allows it.
-- If target-of-target confirms the current target is targeting the player, ppilot blocks assist movement to avoid orbiting or spinning. If target-of-target cannot be read, `/ppilot status` reports it as unknown rather than treating it as confirmed.
+- If target-of-target confirms the current non-dummy target is targeting the player, ppilot blocks assist movement to avoid orbiting or spinning. Training/striking dummies ignore this block for dummy testing. If target-of-target cannot be read, `/ppilot status` reports it as unknown rather than treating it as confirmed.
 - Safety/dependency checks are cached briefly to avoid polling BossMod/vnavmesh every frame.
 - Targets whose `BNpcBase.IsOmnidirectional` flag is true are treated as not requiring positionals, so assist movement is blocked.
 - Fresh known RotationSolver next-GCD or next-action positionals select the movement slice, so PositionalPilot can pre-position instead of relying on True North.

@@ -112,6 +112,14 @@ public sealed class PositionalGeometryTests
         Assert.True(PositionalMovementRules.ShouldBlockForTargetOfTarget(true));
         Assert.False(PositionalMovementRules.ShouldBlockForTargetOfTarget(false));
         Assert.False(PositionalMovementRules.ShouldBlockForTargetOfTarget(null));
+        Assert.False(PositionalMovementRules.ShouldBlockForTargetOfTarget(true, targetIsTrainingDummy: true));
+    }
+
+    [Fact]
+    public void TrainingDummyCanFrontEscapeEvenWhenTargetingPlayer()
+    {
+        Assert.True(PositionalMovementRules.CanFrontEscape(true, true, targetIsTrainingDummy: true));
+        Assert.False(PositionalMovementRules.CanFrontEscape(true, true, targetIsTrainingDummy: false));
     }
 
     [Fact]
