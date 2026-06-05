@@ -2,11 +2,8 @@ name: Release
 
 on:
   push:
-    branches:
-      - main
     tags:
       - "v*"
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -58,32 +55,12 @@ jobs:
           Copy-Item $zip.FullName $asset -Force
           "zip=$asset" >> $env:GITHUB_OUTPUT
 
-      - name: Determine release target
-        id: release
-        shell: pwsh
-        run: |
-          if ("${{ github.ref }}" -like "refs/tags/v*") {
-            "tag=${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
-            "name=PositionalPilot ${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
-          }
-          else {
-            "tag=latest" >> $env:GITHUB_OUTPUT
-            "name=PositionalPilot latest" >> $env:GITHUB_OUTPUT
-          }
-
-      - name: Move latest tag
-        if: ${{ steps.release.outputs.tag == 'latest' }}
-        shell: pwsh
-        run: |
-          git tag -f latest ${{ github.sha }}
-          git push origin latest --force
-
       - name: Publish release asset
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ steps.package.outputs.zip }}
-          name: ${{ steps.release.outputs.name }}
-          tag_name: ${{ steps.release.outputs.tag }}
+          name: PositionalPilot ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
           target_commitish: ${{ github.sha }}
           overwrite_files: true
           make_latest: true
@@ -98,7 +75,7 @@ jobs:
             event_type = "update-pluginmaster"
             client_payload = @{
               repository = "${{ github.repository }}"
-              tag = "${{ steps.release.outputs.tag }}"
+              tag = "${{ github.ref_name }}"
             }
           } | ConvertTo-Json -Compress
 
