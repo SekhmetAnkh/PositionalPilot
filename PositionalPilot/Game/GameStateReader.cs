@@ -1,15 +1,25 @@
 using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.JobGauge.Types;
 using Dalamud.Game.ClientState.Objects.Types;
 using System.Numerics;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using Lumina.Excel.Sheets;
 using PositionalPilot.Core.Geometry;
+using PositionalPilot.Core.Model;
+using LuminaAction = Lumina.Excel.Sheets.Action;
 
 namespace PositionalPilot.Game;
 
 internal sealed unsafe class GameStateReader
 {
     private const uint TrueNorthActionId = 7546;
+    private const uint ActionCategorySpell = 2;
+    private const uint ActionCategoryWeaponskill = 3;
+    private static readonly uint[] PredictorActionIds =
+    {
+        56, 66, 2255, 2258, 3563, 7481, 7482, 34620, 34621, 34622,
+        3554, 3556, 88, 25772, 36958,
+    };
     private readonly PluginServices services;
     private Vector3 lastPlayerPosition;
     private DateTime lastPositionSample = DateTime.MinValue;
@@ -60,7 +70,10 @@ internal sealed unsafe class GameStateReader
                 false,
                 false,
                 false,
-                IsTrueNorthAvailable());
+                IsTrueNorthAvailable())
+            {
+                WrathPredictionSnapshot = ReadWrathPredictionSnapshot(player, null, now),
+            };
         }
 
         var targetBaseId = target.BaseId;
@@ -85,7 +98,10 @@ internal sealed unsafe class GameStateReader
             IsTargetTargetingPlayer(target, player.GameObjectId),
             target.CurrentHp > 0,
             target.IsTargetable,
-            IsTrueNorthAvailable());
+            IsTrueNorthAvailable())
+        {
+            WrathPredictionSnapshot = ReadWrathPredictionSnapshot(player, target, now),
+        };
     }
 
     public static bool IsMeleeJob(uint jobId) => MeleeJobs.Contains(jobId);
@@ -124,6 +140,120 @@ internal sealed unsafe class GameStateReader
         {
             services.Log.Debug(ex, "Failed to read True North availability");
             return false;
+        }
+    }
+
+    private WrathLocalPredictionSnapshot ReadWrathPredictionSnapshot(ICharacter player, IBattleChara? target, DateTime now)
+    {
+        IReadOnlyDictionary<uint, float> playerStatusTimes;
+        IReadOnlyCollection<uint> playerStatuses;
+        if (player is IBattleChara playerBattle)
+        {
+            playerStatuses = ReadStatuses(playerBattle, out playerStatusTimes);
+        }
+        else
+        {
+            playerStatuses = Array.Empty<uint>();
+            playerStatusTimes = new Dictionary<uint, float>();
+        }
+        var targetStatuses = target == null ? Array.Empty<uint>() : ReadStatuses(target, out _);
+
+        return new WrathLocalPredictionSnapshot
+        {
+            JobId = player.ClassJob.RowId,
+            PlayerLevel = player.Level,
+            ComboActionId = ReadComboAction(),
+            PlayerStatusIds = playerStatuses,
+            PlayerStatusRemainingSeconds = playerStatusTimes,
+            TargetStatusIds = targetStatuses,
+            ActionReadyIds = ReadReadyActions(player.Level),
+            MonkCoeurlFury = TryReadGauge<MNKGauge, int>(g => g.CoeurlFury),
+            NinjaKazematoi = TryReadGauge<NINGauge, int>(g => g.Kazematoi),
+            SamuraiHasGetsu = TryReadGauge<SAMGauge, bool>(g => g.HasGetsu),
+            SamuraiHasKa = TryReadGauge<SAMGauge, bool>(g => g.HasKa),
+            ViperDreadCombo = TryReadGauge<VPRGauge, uint>(g => Convert.ToUInt32(g.DreadCombo)) ?? 0,
+            Now = now,
+        };
+    }
+
+    private uint ReadComboAction()
+    {
+        try
+        {
+            var actionManager = ActionManager.Instance();
+            return actionManager == null ? 0 : actionManager->Combo.Action;
+        }
+        catch (Exception ex)
+        {
+            services.Log.Debug(ex, "Failed to read combo action");
+            return 0;
+        }
+    }
+
+    private IReadOnlyCollection<uint> ReadStatuses(IBattleChara chara, out IReadOnlyDictionary<uint, float> remainingTimes)
+    {
+        var statuses = new HashSet<uint>();
+        var times = new Dictionary<uint, float>();
+        try
+        {
+            foreach (var status in chara.StatusList)
+            {
+                if (status.StatusId == 0)
+                    continue;
+
+                statuses.Add(status.StatusId);
+                times[status.StatusId] = MathF.Max(times.TryGetValue(status.StatusId, out var existing) ? existing : 0, status.RemainingTime);
+            }
+        }
+        catch (Exception ex)
+        {
+            services.Log.Debug(ex, "Failed to read statuses for {Name}", chara.Name.ToString());
+        }
+
+        remainingTimes = times;
+        return statuses;
+    }
+
+    private IReadOnlyCollection<uint> ReadReadyActions(byte playerLevel)
+    {
+        var ready = new HashSet<uint>();
+        try
+        {
+            var sheet = services.Data.GetExcelSheet<LuminaAction>();
+            foreach (var actionId in PredictorActionIds)
+            {
+                var row = sheet.GetRowOrDefault(actionId);
+                if (row == null || row.Value.ClassJobLevel > playerLevel)
+                    continue;
+
+                var category = row.Value.ActionCategory.RowId;
+                if (category is not (ActionCategoryWeaponskill or ActionCategorySpell))
+                    continue;
+
+                if (ActionManager.Instance()->GetActionStatus(ActionType.Action, actionId) == 0)
+                    ready.Add(actionId);
+            }
+        }
+        catch (Exception ex)
+        {
+            services.Log.Debug(ex, "Failed to read ready action set");
+        }
+
+        return ready;
+    }
+
+    private TOut? TryReadGauge<TGauge, TOut>(Func<TGauge, TOut> read)
+        where TGauge : JobGaugeBase
+        where TOut : struct
+    {
+        try
+        {
+            return read(services.JobGauges.Get<TGauge>());
+        }
+        catch (Exception ex)
+        {
+            services.Log.Debug(ex, "Failed to read {GaugeType}", typeof(TGauge).Name);
+            return null;
         }
     }
 

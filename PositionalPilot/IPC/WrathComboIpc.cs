@@ -7,6 +7,8 @@ namespace PositionalPilot.IPC;
 
 internal sealed class WrathComboIpc : IpcAdapterBase, IDisposable
 {
+    private const uint ActionCategorySpell = 2;
+    private const uint ActionCategoryWeaponskill = 3;
     private readonly ICallGateSubscriber<bool> ipcReady;
     private readonly ICallGateSubscriber<bool> autoRotationState;
     private readonly ICallGateSubscriber<bool> currentJobAutoRotationReady;
@@ -26,8 +28,10 @@ internal sealed class WrathComboIpc : IpcAdapterBase, IDisposable
 
     public bool ActionEventsAvailable { get; private set; }
     public string? EventLastError { get; private set; }
-    public uint LatestGcdActionId { get; private set; }
-    public DateTime LatestGcdActionUpdatedAt { get; private set; } = DateTime.MinValue;
+    public uint LatestActionId { get; private set; }
+    public DateTime LatestActionUpdatedAt { get; private set; } = DateTime.MinValue;
+    public uint LatestWeaponskillOrSpellActionId { get; private set; }
+    public DateTime LatestWeaponskillOrSpellUpdatedAt { get; private set; } = DateTime.MinValue;
     public bool? AutoRotationEnabled { get; private set; }
     public bool? CurrentJobReady { get; private set; }
 
@@ -50,13 +54,16 @@ internal sealed class WrathComboIpc : IpcAdapterBase, IDisposable
 
     public WrathComboNextActionInfo GetInferredNextActionInfo()
     {
-        var requirement = PositionalActionInference.TryInferWrathNextRequirement(LatestGcdActionId, out var inferred)
+        var requirement = PositionalActionInference.TryInferWrathNextRequirement(LatestWeaponskillOrSpellActionId, out var inferred)
             ? inferred
             : PositionalRequirement.Unknown;
         return new WrathComboNextActionInfo(
-            LatestGcdActionId,
-            GetActionName(LatestGcdActionId),
-            LatestGcdActionUpdatedAt,
+            LatestActionId,
+            GetActionName(LatestActionId),
+            LatestActionUpdatedAt,
+            LatestWeaponskillOrSpellActionId,
+            GetActionName(LatestWeaponskillOrSpellActionId),
+            LatestWeaponskillOrSpellUpdatedAt,
             requirement,
             ActionEventsAvailable);
     }
@@ -102,8 +109,34 @@ internal sealed class WrathComboIpc : IpcAdapterBase, IDisposable
         if (actionType != ActionType.Action)
             return;
 
-        LatestGcdActionId = actionId;
-        LatestGcdActionUpdatedAt = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+        LatestActionId = actionId;
+        LatestActionUpdatedAt = now;
+
+        if (TryGetActionCategory(actionId, out var category) &&
+            category is ActionCategoryWeaponskill or ActionCategorySpell)
+        {
+            LatestWeaponskillOrSpellActionId = actionId;
+            LatestWeaponskillOrSpellUpdatedAt = now;
+        }
+    }
+
+    private bool TryGetActionCategory(uint actionId, out uint category)
+    {
+        category = 0;
+        try
+        {
+            var row = Services.Data.GetExcelSheet<LuminaAction>().GetRowOrDefault(actionId);
+            if (row == null)
+                return false;
+
+            category = row.Value.ActionCategory.RowId;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private string GetActionName(uint actionId)
@@ -124,8 +157,11 @@ internal sealed class WrathComboIpc : IpcAdapterBase, IDisposable
 }
 
 internal sealed record WrathComboNextActionInfo(
-    uint LastGcdActionId,
-    string LastGcdActionName,
-    DateTime LastGcdUpdatedAt,
+    uint LatestActionId,
+    string LatestActionName,
+    DateTime LatestActionUpdatedAt,
+    uint LatestWeaponskillOrSpellActionId,
+    string LatestWeaponskillOrSpellActionName,
+    DateTime LatestWeaponskillOrSpellUpdatedAt,
     PositionalRequirement InferredNextRequirement,
     bool EventsAvailable);

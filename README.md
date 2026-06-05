@@ -9,7 +9,7 @@ The plugin is off by default. It has no stealth, hiding, anti-detection, ban-eva
 - BossModReborn: required by default for safety checks and AI/navigation priority.
 - vnavmesh: required by default for movement.
 - RotationSolverReborn / CombatReborn: optional by default; can be used as the positional intent source through cached next-action events and for narrow NoCasting coordination when enabled.
-- WrathCombo: optional by default; can be selected as the combat intent source through conservative last-GCD positional inference and status diagnostics.
+- WrathCombo: optional by default; can be selected as the combat intent source through Avarice-style local prediction from combo action, gauges, statuses, cooldowns, target debuffs, and filtered last weaponskill/spell diagnostics.
 - Avarice: optional/reference-only. Source inspection found `Avarice.CardinalDirection` but no rear/flank/range movement IPC, so PositionalPilot uses local geometry.
 
 ## Verified IPC
@@ -58,7 +58,7 @@ WrathCombo:
 - `WrathCombo.IsCurrentJobAutoRotationReady` -> `bool`
 - `OnActionUsed` -> event payload `ActionType actionType, uint actionId`
 
-No WrathCombo next-action or next-positional prediction IPC was found. PositionalPilot can still select WrathCombo as the combat intent source by listening to `OnActionUsed` and applying a conservative local inference table for known melee transitions such as SAM `Jinpu -> Gekko`, SAM `Shifu -> Kasha`, RPR Gibbet/Gallows alternation, and VPR coil followups. Ambiguous branches, such as MNK Coeurl stack choices or VPR venom branches that require live buff state, fail closed to rear/flank border hold until a fuller live-state predictor is added.
+No WrathCombo next-action or next-positional prediction IPC was found. PositionalPilot can still select WrathCombo as the combat intent source by listening to `OnActionUsed` for diagnostics while predicting locally from `ActionManager.Combo.Action`, filtered last weaponskill/spell, player gauges, player statuses, target debuffs, cooldown/action availability, and level checks. Raw Wrath action events are shown separately and never overwrite the filtered weaponskill/spell predictor state. Ambiguous branches fail closed to rear/flank border hold.
 
 Avarice:
 
@@ -115,7 +115,7 @@ The repository manifest points to the latest GitHub release asset named `Positio
 - Movement is intentionally gated on BossMod safety IPC by default.
 - Movement uses a single destination per update and does not probe multiple vnavmesh paths.
 - `Any` uses loose rear/flank border holding only: the neutral anchors are calculated from the target's facing vectors and validated behind the target between rear and flank, never flank/front.
-- Fresh known RSR next-GCD/next-action positional changes or fresh known Wrath inferred positionals can bypass the repath cooldown once, so it reacts faster without repeatedly querying vnavmesh.
+- Fresh known RSR next-GCD/next-action positional changes or fresh known Wrath local predictions can bypass the repath cooldown once, so it reacts faster without repeatedly querying vnavmesh.
 - BossMod recommended positionals are not converted into ppilot movement destinations. If the selected combat source does not provide a fresh known Rear/Flank intent, ppilot holds the nearest rear/flank border.
 - If the player is currently in the target's front slice, ppilot treats that as an escape signal and bypasses normal repath cooldown to move toward an intended rear/flank border when BossMod safety allows it.
 - If target-of-target confirms the current target is targeting the player, ppilot blocks assist movement to avoid orbiting or spinning. If target-of-target cannot be read, `/ppilot status` reports it as unknown rather than treating it as confirmed.
@@ -123,7 +123,7 @@ The repository manifest points to the latest GitHub release asset named `Positio
 - Targets whose `BNpcBase.IsOmnidirectional` flag is true are treated as not requiring positionals, so assist movement is blocked.
 - Fresh known RotationSolver next-GCD or next-action positionals select the movement slice, so PositionalPilot can pre-position instead of relying on True North.
 - RotationSolver NoCasting coordination is off by default; enabling it may briefly request NoCasting when the resolved RSR next GCD or next-action positional is Rear/Flank, the player is not already in that slice, and True North is not available. This can happen before issuing movement or after a distance/safety block so RSR has time to let movement happen.
-- WrathCombo source does not use NoCasting and does not control Wrath settings. It only reads Wrath availability/action-use status and infers selected high-confidence next positionals locally.
+- WrathCombo source does not use NoCasting and does not control Wrath settings. It reads Wrath availability/action-use status for diagnostics, filters Wrath action events to weaponskills/spells, and uses local Avarice-style prediction for selected high-confidence next positionals.
 - Avarice is not required because it does not expose the needed rear/flank/range IPC.
 - No next-positional query IPC was found for RotationSolverReborn or WrathCombo, so event data can be stale or unavailable and unknown branches fail closed.
 - The overlay is a simple text overlay, not a world-space marker.

@@ -16,6 +16,7 @@ internal sealed class PluginServices
         ITargetManager targets,
         IDataManager data,
         ICondition condition,
+        IJobGauges jobGauges,
         IFramework framework,
         IChatGui chat,
         IPluginLog log)
@@ -27,6 +28,7 @@ internal sealed class PluginServices
         Targets = targets;
         Data = data;
         Condition = condition;
+        JobGauges = jobGauges;
         Framework = framework;
         Chat = chat;
         Log = log;
@@ -39,6 +41,7 @@ internal sealed class PluginServices
     public ITargetManager Targets { get; }
     public IDataManager Data { get; }
     public ICondition Condition { get; }
+    public IJobGauges JobGauges { get; }
     public IFramework Framework { get; }
     public IChatGui Chat { get; }
     public IPluginLog Log { get; }

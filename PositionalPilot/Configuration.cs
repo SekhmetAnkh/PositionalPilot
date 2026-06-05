@@ -26,6 +26,13 @@ public sealed class Configuration : IPluginConfiguration
             Version = 2;
             Save();
         }
+
+        if (Version < 3)
+        {
+            Settings.EnableSamMeikyoWrathAnticipation = true;
+            Version = 3;
+            Save();
+        }
     }
 
     public void Save() => pluginInterface?.SavePluginConfig(this);

@@ -1,4 +1,5 @@
 using System.Numerics;
+using PositionalPilot.Core.Model;
 
 namespace PositionalPilot.Game;
 
@@ -22,4 +23,7 @@ internal sealed record GameSnapshot(
     bool? TargetTargetsPlayer,
     bool TargetAlive,
     bool TargetTargetable,
-    bool TrueNorthAvailable);
+    bool TrueNorthAvailable)
+{
+    public WrathLocalPredictionSnapshot WrathPredictionSnapshot { get; init; } = new();
+}

@@ -32,11 +32,12 @@ public sealed class Plugin : IDalamudPlugin
         ITargetManager targets,
         IDataManager data,
         ICondition condition,
+        IJobGauges jobGauges,
         IFramework framework,
         IChatGui chat,
         IPluginLog log)
     {
-        services = new PluginServices(pluginInterface, commands, clientState, objects, targets, data, condition, framework, chat, log);
+        services = new PluginServices(pluginInterface, commands, clientState, objects, targets, data, condition, jobGauges, framework, chat, log);
         config = pluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         config.Initialize(pluginInterface);
         logger = new ThrottledLogger(services);
@@ -155,7 +156,10 @@ public sealed class Plugin : IDalamudPlugin
         services.Chat.Print($"RSR next GCD: {next.NextGcdActionName} ({next.NextGcdActionId}), positional={next.NextGcdRequirement}, age={nextAge}, NoCasting={movement.LastNoCastingReason}");
         services.Chat.Print($"RSR next action: {next.NextActionName} ({next.NextActionId}), positional={next.NextActionRequirement}, age={nextActionAge}");
         var wrath = movement.LastWrathComboNextAction;
-        var wrathAge = wrath.LastGcdUpdatedAt == DateTime.MinValue ? "never" : $"{(DateTime.UtcNow - wrath.LastGcdUpdatedAt).TotalMilliseconds:F0}ms";
-        services.Chat.Print($"WrathCombo last GCD: {wrath.LastGcdActionName} ({wrath.LastGcdActionId}), inferredNext={wrath.InferredNextRequirement}, age={wrathAge}, source={config.Settings.CombatIntentSource}");
+        var localWrath = movement.LastWrathLocalPrediction;
+        var rawAge = wrath.LatestActionUpdatedAt == DateTime.MinValue ? "never" : $"{(DateTime.UtcNow - wrath.LatestActionUpdatedAt).TotalMilliseconds:F0}ms";
+        var filteredAge = wrath.LatestWeaponskillOrSpellUpdatedAt == DateTime.MinValue ? "never" : $"{(DateTime.UtcNow - wrath.LatestWeaponskillOrSpellUpdatedAt).TotalMilliseconds:F0}ms";
+        services.Chat.Print($"WrathCombo raw: {wrath.LatestActionName} ({wrath.LatestActionId}), age={rawAge}; filtered weaponskill/spell: {wrath.LatestWeaponskillOrSpellActionName} ({wrath.LatestWeaponskillOrSpellActionId}), age={filteredAge}");
+        services.Chat.Print($"WrathCombo combo={localWrath.ComboActionId}, prediction={localWrath.Requirement}, usable={localWrath.IsFreshOrUsable}, reason={localWrath.Source}, source={config.Settings.CombatIntentSource}");
     }
 }

@@ -140,8 +140,8 @@ internal sealed class ConfigWindow
         DrawDependency("BossModReborn", bossMod.Available, bossMod.LastError, "Used as the safety authority for destination and route checks.");
         DrawDependency("RotationSolverReborn", rotationSolver.Available, rotationSolver.LastError, "Used for RSR next-action events and optional NoCasting coordination.");
         DrawDependency("RSR next-action events", rotationSolver.NextActionEventsAvailable, rotationSolver.EventLastError, "Required for PositionalPilot to know which Rear/Flank action is coming next.");
-        DrawDependency("WrathCombo", wrathCombo.Available, wrathCombo.LastError, "Optional combat intent source. Wrath does not expose next-position IPC, so PositionalPilot infers only known transitions.");
-        DrawDependency("WrathCombo action events", wrathCombo.ActionEventsAvailable, wrathCombo.EventLastError, "Required for Wrath last-GCD inference. If unavailable, Wrath source falls back to border hold.");
+        DrawDependency("WrathCombo", wrathCombo.Available, wrathCombo.LastError, "Optional combat intent source. PositionalPilot predicts Wrath positionals locally from combo, gauges, statuses, and filtered weaponskills.");
+        DrawDependency("WrathCombo action events", wrathCombo.ActionEventsAvailable, wrathCombo.EventLastError, "Used for Wrath raw and filtered action diagnostics. If unavailable, Wrath source falls back to border hold.");
         DrawDependency("vnavmesh", vnavmesh.Available, vnavmesh.LastError, "Used to issue the actual movement request.");
         DrawDependency("Avarice", avarice.Available, avarice.LastError ?? "optional; only CardinalDirection IPC found", "Reference-only status. PositionalPilot does not depend on Avarice for movement.");
 
@@ -169,9 +169,12 @@ internal sealed class ConfigWindow
         DrawStatusRow("RSR next action age", FormatAge(next.NextActionUpdatedAt), "Fresh fallback values can also drive committed Rear/Flank movement.");
         DrawStatusRow("NoCasting", controller.LastNoCastingReason, "Most recent RotationSolver NoCasting decision.");
         var wrath = controller.LastWrathComboNextAction;
-        DrawStatusRow("Wrath last GCD", $"{wrath.LastGcdActionName} ({wrath.LastGcdActionId})", "Latest action observed from WrathCombo's OnActionUsed IPC.");
-        DrawStatusRow("Wrath inferred next", wrath.InferredNextRequirement.ToString(), "Conservative next positional inferred from known Wrath transitions.");
-        DrawStatusRow("Wrath last GCD age", FormatAge(wrath.LastGcdUpdatedAt), "Fresh inferred values can drive committed movement when WrathCombo is selected.");
+        var localWrath = controller.LastWrathLocalPrediction;
+        DrawStatusRow("Wrath raw action", $"{wrath.LatestActionName} ({wrath.LatestActionId})", "Latest raw ActionType.Action observed from WrathCombo's OnActionUsed IPC.");
+        DrawStatusRow("Wrath filtered weaponskill/spell", $"{wrath.LatestWeaponskillOrSpellActionName} ({wrath.LatestWeaponskillOrSpellActionId})", "Latest Wrath action event whose Lumina category is Weaponskill or Spell.");
+        DrawStatusRow("Wrath combo action", localWrath.ComboActionId.ToString(), "Local ActionManager combo action used as the primary Wrath prediction source.");
+        DrawStatusRow("Wrath prediction", $"{localWrath.Requirement} ({localWrath.Source})", "Final Avarice-style local Wrath prediction. Unknown falls back to border hold.");
+        DrawStatusRow("Wrath filtered age", FormatAge(wrath.LatestWeaponskillOrSpellUpdatedAt), "Fresh filtered values can supplement local combo prediction.");
     }
 
     private void DrawSafety()
@@ -232,7 +235,7 @@ internal sealed class ConfigWindow
             config.Settings.CombatIntentSource = (CombatIntentSource)source;
             config.Save();
         }
-        DrawTooltip("RotationSolver uses next-action events. WrathCombo uses conservative last-GCD inference because Wrath does not expose next-positional prediction IPC.");
+        DrawTooltip("RotationSolver uses next-action events. WrathCombo uses local combo/gauge/status prediction because Wrath does not expose next-positional prediction IPC.");
 
         DrawCheckboxSetting(
             "Coordinate with RotationSolver",
@@ -242,6 +245,11 @@ internal sealed class ConfigWindow
         DrawIntSetting("RSR next action max age ms", "Maximum age for cached RSR next-GCD or next-action data before it is ignored.", ref config.Settings.RsrNextActionMaxAgeMs, 25, 250, 5000);
         DrawIntSetting("NoCasting cooldown ms", "Minimum time between NoCasting requests to avoid spamming RSR IPC.", ref config.Settings.NoCastingCooldownMs, 25, 250, 10000);
         DrawFloatSetting("NoCasting duration seconds", "How long each NoCasting request lasts. Keep short so RSR resumes quickly.", ref config.Settings.NoCastingDurationSeconds, 0.05f, 0.1f, 2f);
+        DrawCheckboxSetting(
+            "SAM Meikyo Wrath anticipation",
+            "When WrathCombo is selected, allow local SAM Meikyo/Sen state to anticipate Gekko or Kasha.",
+            value => config.Settings.EnableSamMeikyoWrathAnticipation = value,
+            config.Settings.EnableSamMeikyoWrathAnticipation);
 
         ImGui.Separator();
         var next = controller.LastRotationSolverNextAction;
@@ -253,10 +261,13 @@ internal sealed class ConfigWindow
 
         ImGui.Separator();
         var wrath = controller.LastWrathComboNextAction;
+        var localWrath = controller.LastWrathLocalPrediction;
         DrawStatusRow("Wrath auto-rotation", FormatOptionalBool(wrathCombo.AutoRotationEnabled), "WrathCombo auto-rotation state when exposed by IPC.");
         DrawStatusRow("Wrath current job ready", FormatOptionalBool(wrathCombo.CurrentJobReady), "Whether Wrath reports the current job is configured for auto-rotation.");
-        DrawStatusRow("Wrath last GCD", $"{wrath.LastGcdActionName} ({wrath.LastGcdActionId})", "Latest action observed from WrathCombo's OnActionUsed IPC.");
-        DrawStatusRow("Wrath inferred next", wrath.InferredNextRequirement.ToString(), "Only explicit known transitions infer a committed positional; unknown transitions fall back to border hold.");
+        DrawStatusRow("Wrath raw action", $"{wrath.LatestActionName} ({wrath.LatestActionId})", "Latest raw ActionType.Action observed from WrathCombo's OnActionUsed IPC.");
+        DrawStatusRow("Wrath filtered weaponskill/spell", $"{wrath.LatestWeaponskillOrSpellActionName} ({wrath.LatestWeaponskillOrSpellActionId})", "Latest Wrath action event whose Lumina category is Weaponskill or Spell.");
+        DrawStatusRow("Wrath combo action", localWrath.ComboActionId.ToString(), "Local ActionManager combo action used as the primary Wrath prediction source.");
+        DrawStatusRow("Wrath prediction", $"{localWrath.Requirement} ({localWrath.Source})", "Only high-confidence local predictions commit movement; unknown transitions fall back to border hold.");
         DrawStatusRow("Wrath event status", wrath.EventsAvailable ? "available" : "missing/error", "Wrath inference requires OnActionUsed events.");
     }
 

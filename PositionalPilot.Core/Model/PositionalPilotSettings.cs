@@ -34,4 +34,5 @@ public sealed class PositionalPilotSettings
     public bool OnlyMeleeJobs = true;
     public bool ShowOverlay = true;
     public bool DebugLogging = false;
+    public bool EnableSamMeikyoWrathAnticipation = true;
 }

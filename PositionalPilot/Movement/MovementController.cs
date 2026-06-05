@@ -56,6 +56,8 @@ internal sealed class MovementController
     public string CurrentMovementMode => PositionalMovementRules.MovementModeName(CurrentMovementPositional);
     public RotationSolverNextActionInfo LastRotationSolverNextAction => rotationSolver.GetNextGcdActionInfo();
     public WrathComboNextActionInfo LastWrathComboNextAction => wrathCombo.GetInferredNextActionInfo();
+    public WrathLocalPrediction LastWrathLocalPrediction { get; private set; } =
+        new(0, 0, 0, "not evaluated", PositionalRequirement.Unknown, false);
     public GameSnapshot LastSnapshot { get; private set; } = new(false, default, 0, 0, false, false, false, false, 0, string.Empty, 0, 0, default, 0, 0, null, false, false, false, false);
 
     public void Update()
@@ -392,29 +394,44 @@ internal sealed class MovementController
 
     private PositionalRequirement ResolveWrathComboMovementPositional()
     {
-        var next = wrathCombo.GetInferredNextActionInfo();
-        if (!next.EventsAvailable)
+        if (!wrathCombo.ActionEventsAvailable)
         {
             CurrentMovementPositionalSource = "WrathCombo action event unavailable";
+            LastWrathLocalPrediction = new(
+                wrathCombo.LatestActionId,
+                wrathCombo.LatestWeaponskillOrSpellActionId,
+                LastSnapshot.WrathPredictionSnapshot.ComboActionId,
+                CurrentMovementPositionalSource,
+                PositionalRequirement.Unknown,
+                false);
             return PositionalRequirement.Any;
         }
 
-        if (DateTime.UtcNow - next.LastGcdUpdatedAt > TimeSpan.FromMilliseconds(config.Settings.RsrNextActionMaxAgeMs))
+        var snapshot = LastSnapshot.WrathPredictionSnapshot with
         {
-            CurrentMovementPositionalSource = "WrathCombo inference stale";
-            return PositionalRequirement.Any;
-        }
+            RawActionId = wrathCombo.LatestActionId,
+            RawActionUpdatedAt = wrathCombo.LatestActionUpdatedAt,
+            FilteredWeaponskillOrSpellId = wrathCombo.LatestWeaponskillOrSpellActionId,
+            FilteredWeaponskillOrSpellUpdatedAt = wrathCombo.LatestWeaponskillOrSpellUpdatedAt,
+            EnableSamMeikyoAnticipation = config.Settings.EnableSamMeikyoWrathAnticipation,
+            MaxAgeMs = config.Settings.RsrNextActionMaxAgeMs,
+            Now = DateTime.UtcNow,
+        };
+        var prediction = WrathLocalPositionalPredictor.Predict(snapshot);
+        LastWrathLocalPrediction = prediction;
 
-        if (!PositionalMovementRules.IsCommittedPositional(next.InferredNextRequirement))
+        if (!prediction.IsFreshOrUsable || !PositionalMovementRules.IsCommittedPositional(prediction.Requirement))
         {
-            CurrentMovementPositionalSource = $"WrathCombo cannot infer after {next.LastGcdActionName}";
+            CurrentMovementPositionalSource = prediction.Source;
             return PositionalRequirement.Any;
         }
 
-        CurrentMovementPositional = next.InferredNextRequirement;
-        CurrentMovementPositionalSource = $"WrathCombo inferred after {next.LastGcdActionName}";
-        currentMovementActionId = next.LastGcdActionId;
-        return next.InferredNextRequirement;
+        CurrentMovementPositional = prediction.Requirement;
+        CurrentMovementPositionalSource = prediction.Source;
+        currentMovementActionId = prediction.ComboActionId != 0
+            ? prediction.ComboActionId
+            : prediction.FilteredWeaponskillOrSpellId;
+        return prediction.Requirement;
     }
 
     private static bool IsPlayerCurrentlyInFront(GameSnapshot snapshot)
