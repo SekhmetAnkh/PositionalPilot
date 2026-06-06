@@ -35,4 +35,6 @@ public sealed class PositionalPilotSettings
     public bool ShowOverlay = true;
     public bool DebugLogging = false;
     public bool EnableSamMeikyoWrathAnticipation = true;
+    public bool TrackSuccessfulPositionals = true;
+    public PositionalStatsBook LifetimeStats = new();
 }

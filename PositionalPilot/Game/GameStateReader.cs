@@ -77,7 +77,7 @@ internal sealed unsafe class GameStateReader
         }
 
         var targetBaseId = target.BaseId;
-        var targetDataId = target.DataId;
+        var targetDataId = target.BaseId;
         var targetName = target.Name.ToString();
         return new GameSnapshot(
             true,

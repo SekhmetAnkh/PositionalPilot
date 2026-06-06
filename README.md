@@ -73,12 +73,16 @@ No useful rear/flank/range IPC was found.
 - `/ppilot off`: disable and stop movement.
 - `/ppilot stop`: emergency stop, disables plugin and stops vnavmesh.
 - `/ppilot suggest`: toggle SuggestOnly mode.
-- `/ppilot status`: print dependency, target, border side, destination, and block status.
+- `/ppilot status`: print compact target, movement, block, and current-job stat status.
 - `/ppilot debug`: toggle throttled debug logging.
 
 ## Configuration UI
 
-The configuration window is organized into tabs for Main controls, Status, Safety, Movement, Combat Source, and Debug. Hover any setting or important status row for a short explanation of what it changes and why the default is conservative.
+The configuration window is organized into a compact Dashboard, grouped Settings, Statistics, and Advanced diagnostics. The default view shows movement intent, target state, dependency health, and current-job positional stats; raw IPC/event details are kept in Advanced.
+
+## Positional Statistics
+
+PositionalPilot tracks successful positionals per session, per class/job, and lifetime. Like Avarice, it uses local action-effect result data rather than movement proximity: a known positional action must resolve from the local player and include a damage effect whose potency marker matches a known successful positional hit. Session data resets when Dalamud/plugin state resets or when manually cleared; lifetime data is saved in plugin config.
 
 ## Safety Philosophy
 
@@ -124,6 +128,7 @@ The repository manifest points to the latest GitHub release asset named `Positio
 - Fresh known RotationSolver next-GCD or next-action positionals select the movement slice, so PositionalPilot can pre-position instead of relying on True North.
 - RotationSolver NoCasting coordination is off by default; enabling it may briefly request NoCasting when the resolved RSR next GCD or next-action positional is Rear/Flank, the player is not already in that slice, and True North is not available. This can happen before issuing movement or after a distance/safety block so RSR has time to let movement happen.
 - WrathCombo source does not use NoCasting and does not control Wrath settings. It reads Wrath availability/action-use status for diagnostics, filters Wrath action events to weaponskills/spells, and uses local Avarice-style prediction for selected high-confidence next positionals.
+- Positional statistics require the action-effect tracker hook to be available. If it cannot hook the local client action-effect handler, the UI reports the tracker as unavailable and no success data is recorded.
 - Avarice is not required because it does not expose the needed rear/flank/range IPC.
 - No next-positional query IPC was found for RotationSolverReborn or WrathCombo, so event data can be stale or unavailable and unknown branches fail closed.
 - The overlay is a simple text overlay, not a world-space marker.

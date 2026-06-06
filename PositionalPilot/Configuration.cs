@@ -33,6 +33,16 @@ public sealed class Configuration : IPluginConfiguration
             Version = 3;
             Save();
         }
+
+        if (Version < 4)
+        {
+            Settings.TrackSuccessfulPositionals = true;
+            Settings.LifetimeStats ??= new PositionalStatsBook();
+            Version = 4;
+            Save();
+        }
+
+        Settings.LifetimeStats ??= new PositionalStatsBook();
     }
 
     public void Save() => pluginInterface?.SavePluginConfig(this);

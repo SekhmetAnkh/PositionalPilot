@@ -18,6 +18,7 @@ internal sealed class PluginServices
         ICondition condition,
         IJobGauges jobGauges,
         IFramework framework,
+        IGameInteropProvider gameInterop,
         IChatGui chat,
         IPluginLog log)
     {
@@ -30,6 +31,7 @@ internal sealed class PluginServices
         Condition = condition;
         JobGauges = jobGauges;
         Framework = framework;
+        GameInterop = gameInterop;
         Chat = chat;
         Log = log;
     }
@@ -43,6 +45,7 @@ internal sealed class PluginServices
     public ICondition Condition { get; }
     public IJobGauges JobGauges { get; }
     public IFramework Framework { get; }
+    public IGameInteropProvider GameInterop { get; }
     public IChatGui Chat { get; }
     public IPluginLog Log { get; }
 }

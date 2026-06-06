@@ -21,6 +21,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly VnavmeshIpc vnavmesh;
     private readonly AvariceIpc avarice;
     private readonly GameStateReader gameState;
+    private readonly PositionalStatsService stats;
+    private readonly PositionalActionEffectTracker positionalEffects;
     private readonly MovementController movement;
     private readonly ConfigWindow window;
 
@@ -34,10 +36,11 @@ public sealed class Plugin : IDalamudPlugin
         ICondition condition,
         IJobGauges jobGauges,
         IFramework framework,
+        IGameInteropProvider gameInterop,
         IChatGui chat,
         IPluginLog log)
     {
-        services = new PluginServices(pluginInterface, commands, clientState, objects, targets, data, condition, jobGauges, framework, chat, log);
+        services = new PluginServices(pluginInterface, commands, clientState, objects, targets, data, condition, jobGauges, framework, gameInterop, chat, log);
         config = pluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         config.Initialize(pluginInterface);
         logger = new ThrottledLogger(services);
@@ -47,8 +50,10 @@ public sealed class Plugin : IDalamudPlugin
         vnavmesh = new VnavmeshIpc(services, logger);
         avarice = new AvariceIpc(services, logger);
         gameState = new GameStateReader(services);
+        stats = new PositionalStatsService(config);
+        positionalEffects = new PositionalActionEffectTracker(services, config, stats, logger);
         movement = new MovementController(config, gameState, bossMod, vnavmesh, rotationSolver, wrathCombo, logger);
-        window = new ConfigWindow(config, bossMod, rotationSolver, wrathCombo, vnavmesh, avarice, movement);
+        window = new ConfigWindow(services, config, bossMod, rotationSolver, wrathCombo, vnavmesh, avarice, movement, stats, positionalEffects);
 
         services.Commands.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
@@ -68,6 +73,7 @@ public sealed class Plugin : IDalamudPlugin
         services.Commands.RemoveHandler(CommandName);
         rotationSolver.Dispose();
         wrathCombo.Dispose();
+        positionalEffects.Dispose();
     }
 
     private void OnFrameworkUpdate(IFramework framework) => movement.Update();
@@ -146,20 +152,10 @@ public sealed class Plugin : IDalamudPlugin
         var cacheAge = movement.LastCachedSafety.UpdatedAt == DateTime.MinValue
             ? "never"
             : $"{(DateTime.UtcNow - movement.LastCachedSafety.UpdatedAt).TotalMilliseconds:F0}ms";
-        services.Chat.Print($"PositionalPilot: enabled={config.Settings.Enabled}, mode={config.Settings.MovementMode}, state={movement.State}");
-        services.Chat.Print($"Deps: BossMod={bossMod.Available} ({bossMod.LastError ?? "ok"}), RSR={rotationSolver.Available} ({rotationSolver.LastError ?? "ok"}), RSRNext={rotationSolver.NextActionEventsAvailable} ({rotationSolver.EventLastError ?? "ok"}), Wrath={wrathCombo.Available} ({wrathCombo.LastError ?? "ok"}), WrathEvents={wrathCombo.ActionEventsAvailable} ({wrathCombo.EventLastError ?? "ok"}), vnavmesh={vnavmesh.Available} ({vnavmesh.LastError ?? "ok"}), Avarice={avarice.Available} ({avarice.LastError ?? "optional"})");
+        services.Chat.Print($"PositionalPilot: enabled={config.Settings.Enabled}, mode={config.Settings.MovementMode}, state={movement.State}, source={config.Settings.CombatIntentSource}");
         var targetTargetsPlayer = snap.TargetTargetsPlayer switch { true => "yes", false => "no", _ => "unknown" };
-        services.Chat.Print($"Target: {(snap.HasTarget ? snap.TargetName : "none")}, dummy={snap.TargetIsTrainingDummy}, targetPositionals={positionals}, targetTargetsPlayer={targetTargetsPlayer}, trueNorth={snap.TrueNorthAvailable}, positional={movement.CurrentPositional}, movement={movement.CurrentMovementPositional} ({movement.CurrentMovementMode}; {movement.CurrentMovementPositionalSource}), border={movement.CurrentBorderSide}, destination={movement.ChosenDestination?.ToString() ?? "none"}, block={movement.BlockReason}, cacheAge={cacheAge}");
-        var next = movement.LastRotationSolverNextAction;
-        var nextAge = next.NextGcdUpdatedAt == DateTime.MinValue ? "never" : $"{(DateTime.UtcNow - next.NextGcdUpdatedAt).TotalMilliseconds:F0}ms";
-        var nextActionAge = next.NextActionUpdatedAt == DateTime.MinValue ? "never" : $"{(DateTime.UtcNow - next.NextActionUpdatedAt).TotalMilliseconds:F0}ms";
-        services.Chat.Print($"RSR next GCD: {next.NextGcdActionName} ({next.NextGcdActionId}), positional={next.NextGcdRequirement}, age={nextAge}, NoCasting={movement.LastNoCastingReason}");
-        services.Chat.Print($"RSR next action: {next.NextActionName} ({next.NextActionId}), positional={next.NextActionRequirement}, age={nextActionAge}");
-        var wrath = movement.LastWrathComboNextAction;
-        var localWrath = movement.LastWrathLocalPrediction;
-        var rawAge = wrath.LatestActionUpdatedAt == DateTime.MinValue ? "never" : $"{(DateTime.UtcNow - wrath.LatestActionUpdatedAt).TotalMilliseconds:F0}ms";
-        var filteredAge = wrath.LatestWeaponskillOrSpellUpdatedAt == DateTime.MinValue ? "never" : $"{(DateTime.UtcNow - wrath.LatestWeaponskillOrSpellUpdatedAt).TotalMilliseconds:F0}ms";
-        services.Chat.Print($"WrathCombo raw: {wrath.LatestActionName} ({wrath.LatestActionId}), age={rawAge}; filtered weaponskill/spell: {wrath.LatestWeaponskillOrSpellActionName} ({wrath.LatestWeaponskillOrSpellActionId}), age={filteredAge}");
-        services.Chat.Print($"WrathCombo combo={localWrath.ComboActionId}, prediction={localWrath.Requirement}, usable={localWrath.IsFreshOrUsable}, reason={localWrath.Source}, source={config.Settings.CombatIntentSource}");
+        services.Chat.Print($"Target: {(snap.HasTarget ? snap.TargetName : "none")}, dummy={snap.TargetIsTrainingDummy}, positionals={positionals}, targetTargetsPlayer={targetTargetsPlayer}");
+        services.Chat.Print($"Movement: {movement.CurrentMovementPositional} ({movement.CurrentMovementMode}; {movement.CurrentMovementPositionalSource}), border={movement.CurrentBorderSide}, destination={movement.ChosenDestination?.ToString() ?? "none"}, block={movement.BlockReason}, cacheAge={cacheAge}");
+        services.Chat.Print($"Stats: session={stats.SessionStats.GetSuccessfulPositionals(snap.JobId)} / lifetime={stats.LifetimeStats.GetSuccessfulPositionals(snap.JobId)} successful positionals for current job.");
     }
 }
