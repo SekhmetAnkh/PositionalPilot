@@ -14,6 +14,7 @@ internal sealed class MovementController
     private readonly VnavmeshIpc vnavmesh;
     private readonly RotationSolverIpc rotationSolver;
     private readonly WrathComboIpc wrathCombo;
+    private readonly TrueNorthAction trueNorth;
     private readonly SafetyGate safety;
     private readonly ThrottledLogger logger;
 
@@ -28,11 +29,12 @@ internal sealed class MovementController
     private Vector3? lastFailedPathDestination;
     private DateTime lastFailedPathTime = DateTime.MinValue;
     private DateTime nextNoCastingAllowed = DateTime.MinValue;
+    private DateTime nextTrueNorthAllowed = DateTime.MinValue;
     private PositionalRequirement lastMovementPositional = PositionalRequirement.Unknown;
     private uint lastMovementActionId;
     private uint currentMovementActionId;
 
-    public MovementController(Configuration config, GameStateReader game, BossModIpc bossMod, VnavmeshIpc vnavmesh, RotationSolverIpc rotationSolver, WrathComboIpc wrathCombo, ThrottledLogger logger)
+    public MovementController(Configuration config, GameStateReader game, BossModIpc bossMod, VnavmeshIpc vnavmesh, RotationSolverIpc rotationSolver, WrathComboIpc wrathCombo, TrueNorthAction trueNorth, ThrottledLogger logger)
     {
         this.config = config;
         this.game = game;
@@ -40,6 +42,7 @@ internal sealed class MovementController
         this.vnavmesh = vnavmesh;
         this.rotationSolver = rotationSolver;
         this.wrathCombo = wrathCombo;
+        this.trueNorth = trueNorth;
         this.logger = logger;
         safety = new SafetyGate(config, bossMod);
     }
@@ -51,6 +54,7 @@ internal sealed class MovementController
     public Vector3? ChosenDestination => currentDestination?.Position;
     public CachedSafetyState LastCachedSafety => cachedSafety;
     public string LastNoCastingReason { get; private set; } = "not evaluated";
+    public string LastTrueNorthDecision { get; private set; } = "not evaluated";
     public PositionalRequirement CurrentMovementPositional { get; private set; } = PositionalRequirement.Unknown;
     public string CurrentMovementPositionalSource { get; private set; } = "not evaluated";
     public string CurrentMovementMode => PositionalMovementRules.MovementModeName(CurrentMovementPositional);
@@ -143,6 +147,16 @@ internal sealed class MovementController
         if (selected == null)
         {
             BlockReason = string.IsNullOrWhiteSpace(destinationFailureReason) ? "no safe destination" : destinationFailureReason;
+            MaybeUseTrueNorthFallback(LastSnapshot, movementPositional, BlockReason);
+            State = MovementState.Blocked;
+            RecordMovementCadence(movementPositional);
+            return;
+        }
+
+        if (!CanArriveForCommittedMovement(selected, out var budgetReason))
+        {
+            BlockReason = budgetReason;
+            MaybeUseTrueNorthFallback(LastSnapshot, movementPositional, budgetReason);
             State = MovementState.Blocked;
             RecordMovementCadence(movementPositional);
             return;
@@ -152,6 +166,7 @@ internal sealed class MovementController
         if (!safety.CanMoveTo(LastSnapshot, cachedSafety, selected.Position, out reason))
         {
             BlockReason = reason;
+            MaybeUseTrueNorthFallback(LastSnapshot, movementPositional, reason);
             MaybeTriggerNoCasting(LastSnapshot, selected);
             State = MovementState.Blocked;
             RecordMovementCadence(movementPositional);
@@ -256,34 +271,72 @@ internal sealed class MovementController
                    !RecentlyFailedPath(sideDestination.Position);
         });
 
-        var destination = PositionalGeometry.CreateBorderDestination(snapshot.PlayerPosition, target, positional, selectedSide, config.Settings);
+        if (!PositionalMovementRules.IsCommittedPositional(positional))
+        {
+            var borderDestination = PositionalGeometry.CreateBorderDestination(snapshot.PlayerPosition, target, positional, selectedSide, config.Settings);
+            if (!IsCandidateAllowed(snapshot, target, borderDestination))
+                return RejectDestination("destination is not rear/flank safe", positional);
+
+            currentDestination = borderDestination;
+            logger.Debug(config, "border-destination", $"Selected {borderDestination.Position} on {selectedSide} border for {positional}");
+            return currentDestination;
+        }
+
+        var candidates = PositionalDestinationPlanner
+            .EnumerateCandidates(snapshot.PlayerPosition, target, positional, selectedSide, config.Settings)
+            .Where(candidate => IsCandidateAllowed(snapshot, target, candidate))
+            .Select(candidate => candidate with
+            {
+                Score = PositionalDestinationPlanner.ScoreCandidate(candidate, snapshot.PlayerPosition, target, config.Settings, currentDestination?.Position),
+            })
+            .Where(candidate => float.IsFinite(candidate.Score))
+            .OrderBy(candidate => candidate.Score)
+            .ToList();
+
+        if (candidates.Count == 0)
+            return RejectDestination("no safe committed positional candidate", positional);
+
+        currentDestination = candidates[0];
+        selectedSide = currentDestination.Side;
+        logger.Debug(config, "border-destination", $"Selected {currentDestination.Position} on {selectedSide} for {positional}; candidates={candidates.Count}; score={currentDestination.Score:0.00}");
+        return currentDestination;
+    }
+
+    private BorderDestination? RejectDestination(string reason, PositionalRequirement positional)
+    {
+        destinationFailureReason = reason;
+        currentDestination = null;
+        logger.Debug(config, "border-destination", $"{destinationFailureReason}; side={selectedSide}; positional={positional}");
+        return null;
+    }
+
+    private bool IsCandidateAllowed(GameSnapshot snapshot, TargetSnapshot target, BorderDestination destination)
+    {
         if (!IsDestinationInRequestedSlice(target, destination))
         {
-            destinationFailureReason = "destination is not rear/flank safe";
-            currentDestination = null;
-            logger.Debug(config, "border-destination", $"{destinationFailureReason}; side={selectedSide}; positional={positional}");
-            return null;
+            destinationFailureReason = "candidate is not in requested slice";
+            return false;
+        }
+
+        if (!PositionalDestinationPlanner.IsCandidateInMeleeRange(destination.Position, target, config.Settings))
+        {
+            destinationFailureReason = "candidate outside melee range";
+            return false;
         }
 
         if (RecentlyFailedPath(destination.Position))
         {
             destinationFailureReason = "recent vnavmesh failure for border destination";
-            currentDestination = null;
-            logger.Debug(config, "border-destination", $"{destinationFailureReason}; side={selectedSide}; positional={positional}");
-            return null;
+            return false;
         }
 
         if (!bossMod.IsPositionSafe(destination.Position) || !bossMod.IsDashSafe(snapshot.PlayerPosition, destination.Position))
         {
             destinationFailureReason = "BossMod reports border destination unsafe";
-            currentDestination = null;
-            logger.Debug(config, "border-destination", $"{destinationFailureReason}; side={selectedSide}; positional={positional}; destination={destination.Position}");
-            return null;
+            return false;
         }
 
-        currentDestination = destination;
-        logger.Debug(config, "border-destination", $"Selected {destination.Position} on {selectedSide} border for {positional}");
-        return currentDestination;
+        return true;
     }
 
     private bool TryBlockWithoutIpc(GameSnapshot snapshot, out string reason)
@@ -505,6 +558,55 @@ internal sealed class MovementController
         config.Settings.CombatIntentSource == CombatIntentSource.WrathCombo
             ? wrathCombo.Available
             : rotationSolver.Available;
+
+    private bool CanArriveForCommittedMovement(BorderDestination selected, out string reason)
+    {
+        if (!PositionalMovementRules.IsCommittedPositional(selected.Requirement))
+        {
+            reason = "border hold has no action budget";
+            return true;
+        }
+
+        var budget = GetAvailableMovementBudgetSeconds();
+        return PositionalMovementBudgetPolicy.CanArriveInTime(
+            selected.DistanceFromPlayer,
+            budget,
+            config.Settings,
+            out reason);
+    }
+
+    private float? GetAvailableMovementBudgetSeconds()
+    {
+        // TODO: RotationSolver next-action events currently expose action IDs only, not GCD remaining,
+        // action-ahead, or primary target id. Keep committed movement fail-closed until reliable timing IPC exists.
+        return null;
+    }
+
+    private void MaybeUseTrueNorthFallback(GameSnapshot snapshot, PositionalRequirement movementPositional, string movementBlockReason)
+    {
+        if (DateTime.UtcNow < nextTrueNorthAllowed)
+        {
+            LastTrueNorthDecision = "cooldown";
+            return;
+        }
+
+        if (!TrueNorthFallbackPolicy.ShouldUseTrueNorth(snapshot, movementPositional, config.Settings, out var reason))
+        {
+            LastTrueNorthDecision = reason;
+            return;
+        }
+
+        if (trueNorth.TryUse())
+        {
+            LastTrueNorthDecision = $"{reason}; triggered after {movementBlockReason}";
+            nextTrueNorthAllowed = DateTime.UtcNow.AddMilliseconds(MathF.Max(500, config.Settings.NoCastingCooldownMs));
+            logger.Debug(config, "true-north", LastTrueNorthDecision);
+            return;
+        }
+
+        LastTrueNorthDecision = "True North use failed";
+        nextTrueNorthAllowed = DateTime.UtcNow.AddMilliseconds(1000);
+    }
 
     private static bool IsDestinationInRequestedSlice(TargetSnapshot target, BorderDestination destination)
     {

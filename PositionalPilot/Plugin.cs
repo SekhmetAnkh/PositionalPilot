@@ -23,6 +23,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly GameStateReader gameState;
     private readonly PositionalStatsService stats;
     private readonly PositionalActionEffectTracker positionalEffects;
+    private readonly TrueNorthAction trueNorth;
     private readonly MovementController movement;
     private readonly ConfigWindow window;
 
@@ -52,7 +53,8 @@ public sealed class Plugin : IDalamudPlugin
         gameState = new GameStateReader(services);
         stats = new PositionalStatsService(config);
         positionalEffects = new PositionalActionEffectTracker(services, config, stats, logger);
-        movement = new MovementController(config, gameState, bossMod, vnavmesh, rotationSolver, wrathCombo, logger);
+        trueNorth = new TrueNorthAction(services);
+        movement = new MovementController(config, gameState, bossMod, vnavmesh, rotationSolver, wrathCombo, trueNorth, logger);
         window = new ConfigWindow(services, config, bossMod, rotationSolver, wrathCombo, vnavmesh, avarice, movement, stats, positionalEffects);
 
         services.Commands.AddHandler(CommandName, new CommandInfo(OnCommand)
@@ -155,7 +157,7 @@ public sealed class Plugin : IDalamudPlugin
         services.Chat.Print($"PositionalPilot: enabled={config.Settings.Enabled}, mode={config.Settings.MovementMode}, state={movement.State}, source={config.Settings.CombatIntentSource}");
         var targetTargetsPlayer = snap.TargetTargetsPlayer switch { true => "yes", false => "no", _ => "unknown" };
         services.Chat.Print($"Target: {(snap.HasTarget ? snap.TargetName : "none")}, dummy={snap.TargetIsTrainingDummy}, positionals={positionals}, targetTargetsPlayer={targetTargetsPlayer}");
-        services.Chat.Print($"Movement: {movement.CurrentMovementPositional} ({movement.CurrentMovementMode}; {movement.CurrentMovementPositionalSource}), border={movement.CurrentBorderSide}, destination={movement.ChosenDestination?.ToString() ?? "none"}, block={movement.BlockReason}, cacheAge={cacheAge}");
+        services.Chat.Print($"Movement: {movement.CurrentMovementPositional} ({movement.CurrentMovementMode}; {movement.CurrentMovementPositionalSource}), border={movement.CurrentBorderSide}, destination={movement.ChosenDestination?.ToString() ?? "none"}, block={movement.BlockReason}, trueNorth={movement.LastTrueNorthDecision}, cacheAge={cacheAge}");
         services.Chat.Print($"Stats: session={stats.SessionStats.GetSuccessfulPositionals(snap.JobId)} / lifetime={stats.LifetimeStats.GetSuccessfulPositionals(snap.JobId)} successful positionals for current job.");
     }
 }

@@ -7,9 +7,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>PositionalPilot</AssemblyName>
     <RootNamespace>PositionalPilot</RootNamespace>
-    <Version>0.1.33</Version>
-    <AssemblyVersion>0.1.33.0</AssemblyVersion>
-    <FileVersion>0.1.33.0</FileVersion>
+    <Version>0.1.34</Version>
+    <AssemblyVersion>0.1.34.0</AssemblyVersion>
+    <FileVersion>0.1.34.0</FileVersion>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>

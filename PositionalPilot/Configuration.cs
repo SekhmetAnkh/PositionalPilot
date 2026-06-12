@@ -42,6 +42,17 @@ public sealed class Configuration : IPluginConfiguration
             Save();
         }
 
+        if (Version < 5)
+        {
+            Settings.MeleeRangeYalms = 3.0f;
+            Settings.EstimatedCombatMoveSpeed = 6.0f;
+            Settings.ArrivalBufferSeconds = 0.2f;
+            Settings.FallbackActionAheadSeconds = 0.35f;
+            Settings.EnableTrueNorthFallback = true;
+            Version = 5;
+            Save();
+        }
+
         Settings.LifetimeStats ??= new PositionalStatsBook();
     }
 
